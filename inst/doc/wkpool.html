@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>wkpool: Topology-based Geometry Handling</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">wkpool: Topology-based Geometry
+Handling</h1>
+
+
+
+<div id="why-topology" class="section level2">
+<h2>Why topology?</h2>
+<p><strong>wkpool</strong> represents geometry as segments referencing a
+shared vertex pool. Topology emerges naturally: shared edges,
+neighbours, and ring structure become simple lookups.</p>
+<p>Simple features store geometry as complete coordinate sequences per
+feature. Two adjacent polygons duplicate their shared boundary —
+wasteful in entropy and requiring spatial predicates (GEOS) to
+rediscover adjacency.</p>
+</div>
+<div id="basic-workflow" class="section level2">
+<h2>Basic workflow</h2>
+<p>Create two adjacent squares sharing an edge:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(wk)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(wkpool)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co"># Two adjacent unit squares</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>poly1 <span class="ot">&lt;-</span> <span class="fu">wkt</span>(<span class="st">&quot;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))&quot;</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>poly2 <span class="ot">&lt;-</span> <span class="fu">wkt</span>(<span class="st">&quot;POLYGON ((1 0, 2 0, 2 1, 1 1, 1 0))&quot;</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a>geoms <span class="ot">&lt;-</span> <span class="fu">c</span>(poly1, poly2)</span></code></pre></div>
+<div id="establish-topology" class="section level3">
+<h3>Establish topology</h3>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>pool <span class="ot">&lt;-</span> <span class="fu">establish_topology</span>(geoms)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>pool</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; &lt;wkpool[8 segments, 10 vertices]&gt;</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; [1] &lt;segment: 1-&gt;2&gt;  &lt;segment: 2-&gt;3&gt;  &lt;segment: 3-&gt;4&gt;  &lt;segment: 4-&gt;5&gt; </span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; [5] &lt;segment: 6-&gt;7&gt;  &lt;segment: 7-&gt;8&gt;  &lt;segment: 8-&gt;9&gt;  &lt;segment: 9-&gt;10&gt;</span></span></code></pre></div>
+<p>At this stage, vertices are indexed but not yet merged — the shared
+edge exists as duplicate coordinate pairs.</p>
+</div>
+<div id="inspect-the-raw-state" class="section level3">
+<h3>Inspect the raw state</h3>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">topology_report</span>(pool)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt; $n_vertices_raw</span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; [1] 10</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt; $n_vertices_unique</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; [1] 6</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt; $n_duplicate_vertices</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; [1] 4</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; $n_near_miss_vertices</span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; [1] 0</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; $n_segments</span></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; [1] 8</span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt; $n_shared_edges</span></span>
+<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt; [1] 1</span></span>
+<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt; $n_features</span></span>
+<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span></code></pre></div>
+</div>
+<div id="access-the-pool-components" class="section level3">
+<h3>Access the pool components</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">pool_vertices</span>(pool)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt;    .vx x y</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt; 1    1 0 0</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt; 2    2 1 0</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt; 3    3 1 1</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt; 4    4 0 1</span></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt; 5    5 0 0</span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; 6    6 1 0</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; 7    7 2 0</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; 8    8 2 1</span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; 9    9 1 1</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt; 10  10 1 0</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="fu">pool_segments</span>(pool)</span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;   .vx0 .vx1 .feature</span></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; 1    1    2        1</span></span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt; 2    2    3        1</span></span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt; 3    3    4        1</span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt; 4    4    5        1</span></span>
+<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt; 5    6    7        2</span></span>
+<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a><span class="co">#&gt; 6    7    8        2</span></span>
+<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a><span class="co">#&gt; 7    8    9        2</span></span>
+<span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="co">#&gt; 8    9   10        2</span></span>
+<span id="cb4-23"><a href="#cb4-23" tabindex="-1"></a><span class="fu">pool_feature</span>(pool)</span>
+<span id="cb4-24"><a href="#cb4-24" tabindex="-1"></a><span class="co">#&gt; [1] 1 1 1 1 2 2 2 2</span></span></code></pre></div>
+</div>
+<div id="merge-coincident-vertices" class="section level3">
+<h3>Merge coincident vertices</h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>pool <span class="ot">&lt;-</span> <span class="fu">merge_coincident</span>(pool)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="fu">topology_report</span>(pool)</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; $n_vertices_raw</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; [1] 6</span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; $n_vertices_unique</span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt; [1] 6</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; $n_duplicate_vertices</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt; [1] 0</span></span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt; $n_near_miss_vertices</span></span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="co">#&gt; [1] 0</span></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt; $n_segments</span></span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="co">#&gt; [1] 8</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt; $n_shared_edges</span></span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt; [1] 1</span></span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; $n_features</span></span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span></code></pre></div>
+<p>After merging, shared edge vertices reference the same pool
+indices.</p>
+</div>
+</div>
+<div id="adjacency-discovery" class="section level2">
+<h2>Adjacency discovery</h2>
+<div id="shared-edges" class="section level3">
+<h3>Shared edges</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">find_shared_edges</span>(pool)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt;   edge_key .vx0 .vx1 .feature segment_idx features</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; 2      2-3    2    3        1           2     1, 2</span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="co">#&gt; 8      2-3    2    3        2           8     1, 2</span></span></code></pre></div>
+<p>Returns segment indices that appear in multiple features.</p>
+</div>
+<div id="internal-boundaries" class="section level3">
+<h3>Internal boundaries</h3>
+<p>For polygon data, shared edges with <em>opposite</em> winding
+indicate true internal boundaries (not self-shared rings):</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">find_internal_boundaries</span>(pool)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; &lt;wkpool[2 segments, 6 vertices]&gt;</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; [1] &lt;segment: 2-&gt;3&gt; &lt;segment: 3-&gt;2&gt;</span></span></code></pre></div>
+</div>
+<div id="neighbour-graph" class="section level3">
+<h3>Neighbour graph</h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">find_neighbours</span>(pool)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="co">#&gt;   feature_a feature_b</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="co">#&gt; 3         1         2</span></span></code></pre></div>
+<p>Returns a data frame of feature pairs that share an edge.</p>
+</div>
+</div>
+<div id="ring-and-cycle-analysis" class="section level2">
+<h2>Ring and cycle analysis</h2>
+<p>Topology enables ring discovery without parsing WKT structure.</p>
+<div id="find-closed-cycles" class="section level3">
+<h3>Find closed cycles</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>cycles <span class="ot">&lt;-</span> <span class="fu">find_cycles</span>(pool)</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>cycles</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; [[1]]</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt; [1] 1 2 3 4</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="co">#&gt; [[2]]</span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="co">#&gt; [1] 2 5 6 3</span></span></code></pre></div>
+</div>
+<div id="classify-by-winding" class="section level3">
+<h3>Classify by winding</h3>
+<p>Signed area distinguishes outer rings from holes. Following the SF
+convention, negative area indicates an outer ring, positive indicates a
+hole:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="co"># Area of the first cycle</span></span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="fu">cycle_signed_area</span>(cycles[[<span class="dv">1</span>]], <span class="fu">pool_vertices</span>(pool))</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt; [1] 1</span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="co"># Classify all cycles</span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="fu">classify_cycles</span>(pool)</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt;   cycle area type</span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; 1     1    1 hole</span></span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt; 2     2    1 hole</span></span></code></pre></div>
+<p>Use <code>reverse_cycle()</code> to flip winding if needed.</p>
+</div>
+</div>
+<div id="arc-node-topology" class="section level2">
+<h2>Arc-node topology</h2>
+<p>Arcs are maximal sequences of segments passing through degree-2
+vertices. Nodes are vertices where degree ≠ 2 (branch points or
+endpoints).</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">vertex_degree</span>(pool)</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="co">#&gt; 1 2 3 4 5 6 </span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt; 2 4 4 2 2 2</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="fu">find_nodes</span>(pool)</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="co">#&gt; [1] 2 3</span></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="fu">find_arcs</span>(pool)</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; [[1]]</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a><span class="co">#&gt; [1] 2 1 4 3</span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt; [[2]]</span></span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a><span class="co">#&gt; [1] 2 3</span></span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; [[3]]</span></span>
+<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a><span class="co">#&gt; [1] 2 5 6 3</span></span>
+<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a><span class="co">#&gt; [[4]]</span></span>
+<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a><span class="co">#&gt; [1] 2 3</span></span>
+<span id="cb11-18"><a href="#cb11-18" tabindex="-1"></a><span class="fu">arc_node_summary</span>(pool)</span>
+<span id="cb11-19"><a href="#cb11-19" tabindex="-1"></a><span class="co">#&gt; $n_vertices</span></span>
+<span id="cb11-20"><a href="#cb11-20" tabindex="-1"></a><span class="co">#&gt; [1] 6</span></span>
+<span id="cb11-21"><a href="#cb11-21" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-22"><a href="#cb11-22" tabindex="-1"></a><span class="co">#&gt; $n_nodes</span></span>
+<span id="cb11-23"><a href="#cb11-23" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span>
+<span id="cb11-24"><a href="#cb11-24" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-25"><a href="#cb11-25" tabindex="-1"></a><span class="co">#&gt; $n_arcs</span></span>
+<span id="cb11-26"><a href="#cb11-26" tabindex="-1"></a><span class="co">#&gt; [1] 4</span></span>
+<span id="cb11-27"><a href="#cb11-27" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-28"><a href="#cb11-28" tabindex="-1"></a><span class="co">#&gt; $degree_distribution</span></span>
+<span id="cb11-29"><a href="#cb11-29" tabindex="-1"></a><span class="co">#&gt; deg</span></span>
+<span id="cb11-30"><a href="#cb11-30" tabindex="-1"></a><span class="co">#&gt; 2 4 </span></span>
+<span id="cb11-31"><a href="#cb11-31" tabindex="-1"></a><span class="co">#&gt; 4 2 </span></span>
+<span id="cb11-32"><a href="#cb11-32" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-33"><a href="#cb11-33" tabindex="-1"></a><span class="co">#&gt; $arc_length_distribution</span></span>
+<span id="cb11-34"><a href="#cb11-34" tabindex="-1"></a><span class="co">#&gt; arc_lengths</span></span>
+<span id="cb11-35"><a href="#cb11-35" tabindex="-1"></a><span class="co">#&gt; 1 3 </span></span>
+<span id="cb11-36"><a href="#cb11-36" tabindex="-1"></a><span class="co">#&gt; 2 2 </span></span>
+<span id="cb11-37"><a href="#cb11-37" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-38"><a href="#cb11-38" tabindex="-1"></a><span class="co">#&gt; $mean_arc_length</span></span>
+<span id="cb11-39"><a href="#cb11-39" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span></code></pre></div>
+</div>
+<div id="round-trip-to-wkt" class="section level2">
+<h2>Round-trip to WKT</h2>
+<p>Convert topology back to standard geometry formats:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="co"># Arcs as linestrings</span></span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="fu">arcs_to_wkt</span>(pool)</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co">#&gt; &lt;wk_wkt[4]&gt;</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="co">#&gt; [1] LINESTRING (1 0, 0 0, 0 1, 1 1) LINESTRING (1 0, 1 1)          </span></span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a><span class="co">#&gt; [3] LINESTRING (1 0, 2 0, 2 1, 1 1) LINESTRING (1 0, 1 1)</span></span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a><span class="co"># Cycles as polygons</span></span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a><span class="fu">cycles_to_wkt</span>(pool)</span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a><span class="co">#&gt; &lt;wk_wkt[0] with CRS=NA&gt;</span></span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co"># Raw segments</span></span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a><span class="fu">segments_to_wkt</span>(pool, <span class="at">type =</span> <span class="st">&quot;linestring&quot;</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>]</span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a><span class="co">#&gt; &lt;wk_wkt[3]&gt;</span></span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a><span class="co">#&gt; [1] LINESTRING (0 0, 1 0) LINESTRING (1 0, 1 1) LINESTRING (1 1, 0 1)</span></span></code></pre></div>
+</div>
+<div id="triangulation-integration" class="section level2">
+<h2>Triangulation integration</h2>
+<p>The pool maps directly to constrained triangulation inputs.</p>
+<div id="rtriangle-pslg" class="section level3">
+<h3>RTriangle (PSLG)</h3>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>pslg <span class="ot">&lt;-</span> <span class="fu">as_pslg</span>(pool)</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="fu">str</span>(pslg)</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a><span class="co">#&gt; List of 2</span></span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a><span class="co">#&gt;  $ P: num [1:6, 1:2] 0 1 1 0 2 2 0 0 1 1 ...</span></span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a><span class="co">#&gt;  $ S: int [1:8, 1:2] 1 2 3 4 2 5 6 3 2 3 ...</span></span></code></pre></div>
+<p>For polygons with holes, use <code>hole_points()</code> to generate
+interior points that tell the triangulator which regions to exclude:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="co"># A polygon with a hole</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>holed <span class="ot">&lt;-</span> wk<span class="sc">::</span><span class="fu">as_wkb</span>(</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="st">&quot;POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 3 1, 3 3, 1 3, 1 1))&quot;</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>)</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>hp <span class="ot">&lt;-</span> <span class="fu">establish_topology</span>(holed)</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>hp <span class="ot">&lt;-</span> <span class="fu">merge_coincident</span>(hp)</span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>pslg_h <span class="ot">&lt;-</span> <span class="fu">as_pslg</span>(hp)</span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>holes <span class="ot">&lt;-</span> <span class="fu">hole_points</span>(hp)</span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>tri <span class="ot">&lt;-</span> RTriangle<span class="sc">::</span><span class="fu">triangulate</span>(</span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a>  RTriangle<span class="sc">::</span><span class="fu">pslg</span>(<span class="at">P =</span> pslg_h<span class="sc">$</span>P, <span class="at">S =</span> pslg_h<span class="sc">$</span>S, <span class="at">H =</span> holes)</span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+</div>
+<div id="subsetting-and-combining" class="section level2">
+<h2>Subsetting and combining</h2>
+<p>Pools support <code>[</code> subsetting — the full vertex pool is
+retained:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>pool[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>]</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="co">#&gt; &lt;wkpool[4 segments, 6 vertices]&gt;</span></span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="co">#&gt; [1] &lt;segment: 1-&gt;2&gt; &lt;segment: 2-&gt;3&gt; &lt;segment: 3-&gt;4&gt; &lt;segment: 4-&gt;1&gt;</span></span></code></pre></div>
+<p>Combine pools from different sources:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>pool_a <span class="ot">&lt;-</span> <span class="fu">establish_topology</span>(wk<span class="sc">::</span><span class="fu">wkt</span>(<span class="st">&quot;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))&quot;</span>))</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>pool_b <span class="ot">&lt;-</span> <span class="fu">establish_topology</span>(wk<span class="sc">::</span><span class="fu">wkt</span>(<span class="st">&quot;POLYGON ((5 5, 6 5, 6 6, 5 6, 5 5))&quot;</span>))</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a><span class="fu">pool_combine</span>(pool_a, pool_b)</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="co">#&gt; &lt;wkpool[8 segments, 10 vertices]&gt;</span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co">#&gt; [1] &lt;segment: 1-&gt;2&gt;  &lt;segment: 2-&gt;3&gt;  &lt;segment: 3-&gt;4&gt;  &lt;segment: 4-&gt;5&gt; </span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">#&gt; [5] &lt;segment: 6-&gt;7&gt;  &lt;segment: 7-&gt;8&gt;  &lt;segment: 8-&gt;9&gt;  &lt;segment: 9-&gt;10&gt;</span></span></code></pre></div>
+</div>
+<div id="visualization" class="section level2">
+<h2>Visualization</h2>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">plot</span>(pool)</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAkAAAAGACAIAAADK+EpIAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAgAElEQVR4nO3de1zUVeL/8TMw3BTUGQRStBTjFpv6UDEvKE3apgJqAumaosGKRXelFdRtH3nfNaLsJtWapW1goSBKawpsmZYrQQ/NfSShmBSoFDev4MD8/pjvjzUFG298zllez7/gc84wbz+dfPu5zAedxWIRAACoxk7rAAAAXA8KDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJAoMAKAkCgwAoCQKDACgJL3WAS7X2NhYX19vb29vMBi0zgIAkJcsR2Dl5eWLFi3y8fFxdnb28PAwGo3Ozs6+vr7JycllZWVapwMASEdnsVi0ziCKi4tDQkLc3d3Dw8MDAgKMRqPFYqmtrS0pKcnNza2pqSkoKBgwYIDWMQEAEpGiwEwmk4uLS2ZmpouLy2VDZrM5Jiamqqpq586dN/gu8+fP/+yzz27whwAALuXi4vLxxx97eXm1/1tLcQ2sqKho3bp1V7aXEEKv1yckJERERNz4u+zdu/eJJ564++67b/xHAQCs/vCHP5w8ebLjFpifn19+fn5kZGSro3l5ef7+/jfljQICAgYPHnxTfhQAQAjR6rFH+5CiwJKSkqKjo8vKyqKiogIDAw0Gg06ns14Dy8rKys7OzsjI0DojAEAuUhRYZGRkTk5OSkpKXFzcpdt1Op3JZMrJyRk/frxW2QAAcpKiwIQQYWFhYWFhNTU1FRUVlZWVQggvLy9vb2+j0ah1NACAjGQpMCuDwWAwGIKCgi7d2NDQYDabO3furFUqAICE5CqwVs2ePTs9Pd2W2/2bm5uPHz/e3Nzc6mhDQ8O1vnXN2YYLjU3X+irgxnU5/0tnF0etU6DjabYI99u0DmErBQrMZDK5urraMnP37t2xsbFtjR47duyrr74aNmyY7W8d98ZnnZ309nY6218C3LiQMwdmNuwR3Th/jnZ3tlZMekoEjdA6h00UKLD4+Pj4+HhbZoaGhh45cqStUTc3NxuLsEW3To5L/xDsbeTsJdrV4XzzseKf/J/+m9ZB0PG897zo5KZ1CFvJ8ixEAACuCQUGAFASBQYAUJIU18C2bt26e/fuq89ZvXp1+4QBAChBigLr1KnT559//u9//9vZ2blXr16tzqHAAACXkqLAxo4dazKZTCaTxWL5zUMxAACEPNfA7O3tp06dqnUKAIAypDgCs5o0aZKPj4/WKQAAapCowHr16tXWBTAAAC4jyylEAACuCQUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFCSvAXW3NxcWlp68eJFrYMAAGQkS4Ft3749Ojo6IiJi/fr1Qoi33nrL09PT19e3S5cuy5cvt1gsWgcEAMhFr3UAIYT46KOPHnrooeDgYA8Pj/j4+P3797///vsLFiwYMmTInj17XnjhhR49esTGxmodEwAgESkKbOXKlY899tgbb7whhFi7du1jjz22cuXKpKQkIcS4ceOamppee+01CgwAcCkpTiEePnw4PDzc+nVUVJQQYtSoUS2jo0ePLikp0SYZAEBWUhSYt7f3t99+a/36yJEjQojS0tKW0ZKSkt69e2uTDAAgKylOIcbGxv7lL3+prKw0GAxvvfVWcHDwwoULe/bsOWjQoD179ixZsuTRRx/VOiMAQC5SFFhiYuLZs2fXrVt38eLFyMjINWvWJCQk/P73v7eOhoWFLVy4UNuEAADZSFFger1+6dKlS5cubdny9ttvz58/f//+/f7+/kOHDtUwGwBATlIUWKsCAgICAgKEEA0NDWazuXPnzlonAgBIRN4CazF79uz09HRbPstcVFS0atWqtkYvXLhQV1d3U6MBADSjQIGZTCZXV1dbZvbr12/q1KnNzc2tjm7bts3GnwMAkJ8CBRYfHx8fH2/LzK5du0ZGRrY1Ghsba29vf/NyAQC0JF2BNTY21tfX29vbGwwGrbMAAOQlxQeZhRDl5eWLFi3y8fFxdnb28PAwGo3Ozs6+vr7JycllZWVapwMASEeKI7Di4uKQkBB3d/fw8PCAgACj0WixWGpra0tKSjZt2pSWllZQUDBgwACtYwIAJCJFgc2bNy80NDQzM9PFxeWyodTU1JiYmMTExJ07d2qSDQAgJylOIRYVFcXFxV3ZXkIIvV6fkJBQWFjY/qkAADKTosD8/Pzy8/PbGs3Ly/P392/PPAAA+UlxCjEpKSk6OrqsrCwqKiowMNBgMOh0Ous1sKysrOzs7IyMDK0zAgDkIkWBRUZG5uTkpKSkxMXFXbpdp9OZTKacnJzx48drlQ0AICcpCkwIERYWFhYWVlNTU1FRUVlZKYTw8vLy9vY2Go1aRwMAyEiWArMyGAwGgyEoKEjrIAAA2UlxEwcAANeKAgMAKIkCAwAoiQIDACiJAgMAKIkCAwAoiQIDACiJAgMAKIkCAwAoiQIDACiJAgMAKIkCAwAoiQIDACiJAgMAKIkCAwAoSd4Cq62t/f7775ubm7UOAgCQkSwFtnHjxhEjRhw8eFAIcfLkyYiICIPB4Ofn161bt1deeUXrdAAA6UhRYGvWrJk5c6Zer/f09BRCxMTEFBcXv/nmm5988smjjz6amJi4YcMGrTMCAOSi1zqAEEK8/PLLycnJK1asEEKcPHny008//fzzz0eNGiWEGDdunL29fWpq6syZM7WOCQCQiBRHYPX19UOGDLF+XVVVJYQYNGhQy+jo0aNLS0u1SQYAkJUUBTZq1Ki///3vjY2NQoiAgAA3N7evvvqqZXT37t133XWXdukAADKS4hTiypUrQ0NDBw8eHBMTExwcvGDBgpiYmGXLlvXt2/fTTz998cUX33//fa0zAgDkIkWBBQQEfPHFF6mpqatWraqurrZujI2NFUIEBQVt3LjxoYce0jQgAEA6UhSYEMLX1/eNN9545ZVXfvzxx5MnT1ZXVxsMhttuu61v375aRwMAyEiWArNycHDo27fvZaXV0NBgNps7d+6sVSoAgITkKrBWzZ49Oz093WKx/ObMurq6Xbt2tfXwjqampqamppudDgCgDQUKzGQyubq62jLzyJEjGRkZbY1evHjxzJkzNy8XAEBLChRYfHx8fHy8LTMHDRq0adOmtkbd3Ny6du1683IBALQkXYE1NjbW19fb29sbDAatswAA5CXFB5mFEOXl5YsWLfLx8XF2dvbw8DAajc7Ozr6+vsnJyWVlZVqnAwBIR4ojsOLi4pCQEHd39/Dw8ICAAKPRaLFYamtrS0pKNm3alJaWVlBQMGDAAK1jAgAkIkWBzZs3LzQ0NDMz08XF5bKh1NTUmJiYxMTEnTt3apINACAnKU4hFhUVxcXFXdleQgi9Xp+QkFBYWNj+qQAAMmuzwP72t7+Vl5e3Twg/P7/8/Py2RvPy8vz9/dsnCQBAFW2eQlyxYkVSUtKoUaMefvjhqKgoo9F460IkJSVFR0eXlZVFRUUFBgYaDAadTme9BpaVlZWdnX2VT3cBADqmNo/ATp48uWXLlp49e86bN++2226bOHFiRkbGuXPnbkWIyMjInJycCxcuxMXFjRgxIjAwMCAgYNiwYbNmzaqtrc3JyYmMjLwV7wsAUFebR2BOTk6TJk2aNGnSuXPntm3blp6ePmvWLAcHhwcffHD69Oljx47V62/mDSBhYWFhYWE1NTUVFRWVlZVCCC8vL29v71t65AcAUNdvl1CnTp0GDhx47Nix0tLSgwcPZmVlbdy40cvLa9WqVbNmzbq5aQwGg8FgCAoKurk/FgDwv+dqdyEWFhYuXrw4KCjI398/NTV15MiRO3furK6uPnr0aERERGxs7MmTJ9stKAAAl2rzCKx3794//vjj7bffPmXKlLS0tBEjRtjZ/V/b9enT56WXXnr77be/++47Ly+v9ooKAMB/tVlgM2fOnDJlypAhQ1oddXFxKS0tveOOO25ZMAAArqbNAlu+fLlOp7N+XV1dvXfvXjc3t+Dg4E6dOgkh7O3t+/Xr104ZAQC4QivXwPbv3z906NApU6ZYv/3mm2/uvPPOyZMn33///b169dqzZ0/7JgQAoBWXF1htbW1ERETPnj2fffZZ65aYmJiAgIBffvnlzJkzjz/+eFhY2OnTp9s9JwAAv3J5geXl5Xl6em7ZsmX06NFCiG+//fbgwYNLly7t2rWro6Pj0qVL3d3d9+7dq0VUAAD+61fXwHJzc2fMmNHU1NTy8eHGxkYhxJQpU1puQTxz5syUKVMcHR1PnDjh5OTUznEBALD61RHYhAkTrB9SPnXqVE1NTU1NzYgRI+699966urqa/69Hjx5bt26tqamhvQAAGrr8LsQxY8acP3/+0UcffeSRR3bs2LFr166NGzdahxoaGpYtW3b69OmhQ4e2e04AAH7l8gLr1q3bpk2bZs2atW7dOkdHx+Tk5OnTpwshtm3bNnny5M6dO69fv97NzU2LqAAA/FcrnwO77777ysvLKyoqunfv7ujoaN3Yv3//nJyc4ODg7t27t29CAABa0eazEJcvX/7111+3fHv77bePHz+e9gIASKLNAsvOzh4xYoSPj8/zzz9/+PDh9swEAMBvarPAysvLv/zyy8jIyI0bNwYEBAQHB7/88ssnTpxoz3AAALSlzQLT6XTDhg1bvXr10aNHi4qKHnjggbS0tF69eo0bN6498wEA0Kqr/T6wFnfeeefAgQOHDBni4OCwa9euW52pRXZ2dlVVVbu9HQBAIVcrsPLy8jfeeGPcuHHdu3efPn36qVOn1qxZU1lZ2W7hJk+efODAgXZ7OwCAQtr8dSqDBg0qLi52cnK6//7709LSJk2aZDAYblGILVu2bN68udWhlStXrl+/XgixYcOGW/TuAAAVtVlgffr0SUxMDA8P79Kly60O4eTktHnz5nPnzg0ePNjBweHSoYqKirNnz97qAAAA5bRZYG0dEt0KEyZMKCoqevjhh+3t7d977z0/Pz/rdp1O9+qrr44ZM6bdkgAAVGHTTRztwN/f/8svvzSZTIMHD167dq3WcQAAspOlwIQQDg4Oq1at2rZt24oVKyZMmMBnzgAAVyFRgVmFhoYeOHCgS5cud999t9ZZAADyavMamIa6deuWnp6enp6+b9++3r17ax0HACAjGQvMatq0adOmTRNCNDQ0mM3mzp07a50IACAReQusxezZs9PT0y0Wy2/O/Oyzz2JjY9saPXfuXHV19U2NBgDQjAIFZjKZXF1dbZk5atSovLy85ubmVkf79+9vNBpvajQAgGYUKLD4+Pj4+HhbZtrZ2fXp06etUZ1Od9MyAQC0Jl2BNTY21tfX29vb37onVwEA/gfIcht9eXn5okWLfHx8nJ2dPTw8jEajs7Ozr69vcnJyWVmZ1ukAANKR4gisuLg4JCTE3d09PDw8ICDAaDRaLJba2tqSkpJNmzalpaUVFBQMGDBA65gAAIlIUWDz5s0LDQ3NzMx0cXG5bCg1NTUmJiYxMXHnzp2aZAMAyEmKU4hFRUVxcXFXtpcQQq/XJyQkFBYWtn8qAIDMpCgwPz+//Pz8tkbz8vL8/f3bMw8AQH5SnEJMSkqKjo4uKyuLiooKDAw0GAw6nc56DSwrKys7OzsjI0PrjAAAuUhRYJGRkTk5OSkpKXFxcZdu1+l0JpMpJydn/PjxWmUDAMhJigITQoSFhYWFhdXU1FRUVFRWVgohvLy8vL29eXYGAKBVshSYlcFgMBgMQUFBWgcBAMhOips4AAC4VhQYAEBJFBgAQEkUGABASRQYAEBJFBgAQEkUGABASRQYAEBJFBgAQEkUGABASRQYAEBJFBgAQEkUGABASRQYAEBJFBgAQEkSFVhTU1NZWdmFCxcu237hwoWTJ09qEgkAIC0pCsxsNj///PNubm4+Pj5Go3HBggVNTU0toxkZGbfddpuG8QAAEpLiNzKnpqauXLny6aefHj58+J49e1566aWqqqp169ZpnQsAIC8pCuydd9557rnnVqxYIYSIjIwcPHjwjBkzJk+ePHHiRK2jAQAkJcUpxJ9++ikkJKTl24cffnjGjBnPPPPMldfDAACwkqLA7rrrrry8vEu3pKSknD17NjExUatIAADJSXEKcebMmU899ZTZbA4PDx89erSTk5Onp+e77747ceLE06dP9+jRQ+uAAADpSFFgTz75ZF1d3erVq9esWVNaWtqvXz8hxIQJE7KysubOnVtRUaF1QACAdKQ4hSiEWLx4cVVV1ZEjR3r16tWyMTw8/IcffsjLy1u7dq2G2QAAEpLiCMzK0dHRx8fnso16vX7kyJH33HOPJpEAANKSqMDaMnv27PT0dIvF8pszjx07lpGR0dboxYsXua0RAP5nKFBgJpPJ1dXVxsl1dXXNzc2tDtlSgQAAVShQYPHx8fHx8bbM7NOnj/XT0K16/fXXnZ2db14uAICWpCuwxsbG+vp6e3t7g8GgdRYAgLxkuQuxvLx80aJFPj4+zs7OHh4eRqPR2dnZ19c3OTm5rKxM63QAAOlIcQRWXFwcEhLi7u4eHh4eEBBgNBotFkttbW1JScmmTZvS0tIKCgoGDBigdUwAgESkKLB58+aFhoZmZma6uLhcNpSamhoTE5OYmLhz505NsgEA5CTFKcSioqK4uLgr20sIodfrExISCgsL2z8VAEBmUhSYn59ffn5+W6N5eXn+/v7tmQcAID8pTiEmJSVFR0eXlZVFRUUFBgYaDAadTme9BpaVlZWdnX2VjycDADomKQosMjIyJycnJSUlLi7u0u06nc5kMuXk5IwfP16rbAAAOUlRYEKIsLCwsLCwmpqaioqKyspKIYSXl5e3t7fRaNQ6GgBARrIUmJXBYDAYDEFBQVoHAQDIToqbOAAAuFYUGABASRQYAEBJFBgAQEkUGABASRQYAEBJFBgAQEkUGABASRQYAEBJFBgAQEkUGABASRQYAEBJFBgAQEkUGABASRQYAEBJcv0+MCFEY2NjfX29vb29wWDQOgsAQF6yHIGVl5cvWrTIx8fH2dnZw8PDaDQ6Ozv7+vomJyeXlZVpnQ4AIB0pjsCKi4tDQkLc3d3Dw8MDAgKMRqPFYqmtrS0pKdm0aVNaWlpBQcGAAQO0jgkAkIgUBTZv3rzQ0NDMzEwXF5fLhlJTU2NiYhITE3fu3KlJNgCAnKQ4hVhUVBQXF3dlewkh9Hp9QkJCYWFh+6cCAMhMigLz8/PLz89vazQvL8/f37898wAA5CfFKcSkpKTo6OiysrKoqKjAwECDwaDT6azXwLKysrKzszMyMrTOCACQixQFFhkZmZOTk5KSEhcXd+l2nU5nMplycnLGjx+vVTYAgJykKDAhRFhYWFhYWE1NTUVFRWVlpRDCy8vL29vbaDRqHQ0AICNZCszKYDAYDIagoKBLNzY0NJjN5s6dO2uVCgAgIbkKrFWzZ89OT0+3WCy/ObO5ufn48ePNzc2tjtryEy7/gRZLVd15O53uWl8I3IgzFy52a74oak5qHQQdj/mi1gmugQIFZjKZXF1dbZm5e/fu2NjYtkYvXLhgNpuv6a0vNjW/lHPQTopbNdGBDD1/LPZ8pXj/L1oHQcdzrl6YG7UOYSvddRyXKGr48OGpqanDhg3TOggA/O8YMGDAhg0b+vfv3/5vLd0RGA/zBQDYQpazYzzMFwBwTaQ4AuNhvgCAayVFgfEwXwDAtZLiFCIP8wUAXCspjsCsD/ONjIxsdfQmPsw3Ozv7wIEDts/Pzc3t3LmzHffRXzuLxVJRUeHt7a11ECU1NjbW1dV5eHhoHURJdXV1dnZ2bm5uWgdR0qlTp8aOHdu1a1fbX/LLL7/cujxXJ0WBtc/DfOPi4vbv319dXW37S3bs2OHt7e3o6Hjj797RNDU1HTlyxM/PT+sgSjpz5kxNTU3v3r21DqKkqqoqOzs7d3d3rYMo6fjx40KIPn362P6SyMjIa5p/M1nksG3bNpPJdFk2nU5333335ebmapXK19e3pKREq3dXWlVVVffu3bVOoaqtW7dGRERonUJVCxcuXL58udYpVGUymfLz87VOYSspjsAED/MFAFwjWQrMqtWH+QIAcCVuTwAAKIkCAwAoiQIDACiJAgMAKIkCAwAoiQK7Gr1er9fLdaOmKth1N8LBwYG9d930er2Dg4PWKVSl1t7rQL/Q8jr88ssvfJ7/urH3rltTU9Pp06e7deumdRAlnTt3TqfTtfpsVfym6upq67OQtA5iEwoMAKAkTiECAJREgQEAlESBAQCURIEBAJREgQEAlESBAQCURIEBAJREgQEAlESBAQCURIEBAJREgQEAlESBCSFEZmbm0KFDu3Xrdt99933zzTc3OK1DsWWfbNmyRfdrc+bMaeecMtu1a9fWrVuvMoGFdxVX33usvba89tprw4YNc3NzCwgIePHFF81mc6vTJF97FJjYvn17dHT0kCFD3nnnHScnp5CQkPLy8uue1qHYuE+OHj3q6em59hIzZsxo/7Ryam5uXrRo0e7du9uawMK7it/ce6y9Vi1btuzJJ58cOXJkenr6gw8+mJycvGTJkiunKbD2LB2eyWQaN26c9etz58717t174cKF1z2tQ7FxnyQkJIwZM6Z9oymgvLz89ddfHz16tBAiMTGxrWksvFbZuPdYe1dqaGjo0qXLU0891bJl/vz5Li4uZrP5spnyr72OfgRWU1NTUFAQHR1t/dbFxSUsLOzDDz+8vmkdiu375OjRo/369WvfdAo4ePDghx9+2Nzc7Ozs3NYcFl5bbNl7grXXmh9//LG+vj48PLxly/Dhw8+fP3/8+PFLpymx9jp6gVVUVAghAgMDW7YEBgYeO3assbHxOqZ1KLbvk6NHj/7www+DBw92dXUdOHDgW2+91a5BZTV+/Pjdu3fv3r27V69ebc1h4bXFlr0nWHut8fb2Li0ttR68Wu3Zs8fFxaVHjx6XTlNi7XX0Ajtx4oQQwmAwtGwxGo0Wi6W+vv46pnUoNu6T5ubmY8eOFRYWzpo164MPPggODp47d25KSkp7x1UTC+9GsPZa5eTk1K9fPycnJ+u3H3zwwauvvvrEE09cdiyrxNrTax1AYxaLRQhx6e/Ptm6xt7e/jmkdio37xGw2v//++8HBwT4+PkKISZMmNTY2Llmy5Nlnn7Wz6+j/fvpNLLwbwdq7uqqqqvnz52/YsGH27NkrVqy4bFSJtdfR/yt6eXkJIWpra1u21NbWOjk5XfrvDtundSg27hNHR8epU6da/waxmjx5cn19fVlZWbtFVRcL70aw9q4iNzf3d7/73RdffJGVlfXuu+/q9ZcfzCix9jp6gXl7e+t0upKSkpYt33///ZVn1W2c1qHYuE9OnTr19ddfW//tZmX9X8XV1bV9ciqNhXcjWHttyc3NnThxYlRU1H/+859Jkya1OkeJtdfRC8xoNJpMpqysLOu3ZrN5+/btUVFR1zetQ7Fxnxw4cGDIkCGX3ry0ffv222+/3frvO1wdC+9GsPZaZTab58yZM3369Ndff/0q93Cqsfba/cZ96eTm5trb27/wwgtffPHF9OnTDQbD0aNHrUNpaWnTpk27cOHC1ad1WLbsOrPZfM8993h6ei5dunT79u1PPfWUnZ3dRx99pG1yqdx5552XfZKJhWe7q+w91l6r8vLyhBB/+tOf1v/a+fPnLaqtPQrMYrFYPvroo6FDh3bt2nXMmDHFxcUt2//4xz8KIc6cOXP1aR2ZLbvu3LlzzzzzTEBAgJub24gRIz755BPt8sroyr+CWXi2u/reY+1dae3ata0ezJw4ccKi2trTWS45QQwAgCo6+jUwAICiKDAAgJIoMACAkigwAICSKDAAgJIoMACAkigwAICSKDAAgJIoMACAkigwAICSKDAAgJIoMACAkigwAICSKDAAgJIoMACAkigwAICSKDAAgJIoMACAkigwAICSKDAAgJIoMACAkigwAICSKDAAgJIoMACAkigwQEa5ublaRwBkR4EBcqmrq9uyZUtkZOTmzZvr6uq0jgPIS2exWLTOAOD/5OfnT5061cnJ6dSpU/7+/lVVVTk5OcHBwVrnAmREgQESuf322++///61a9d6enpWV1c/+OCDlZWV+/bt0zoXICNOIQLtbcqUKYMGDWr51mKx9OrV6/HHH6+oqCgvL3/kkUccHByEEDqdbt68eT179rRYLLt27bKzs/vXv/5lfUlmZqajo+OBAwc0yQ9IggID2ltUVFRxcXF5ebn123379v30008zZszo3r27o6Pjjh07WmaOHj16y5YtOp1u7NixM2fOfOyxxxobG0+fPv30008vWLCgf//+Gv0JAClQYEB7Cw8Pd3JyysnJsX6bmZnZt2/f4cOHOzo6zp8/f9myZQ888EBjY+OhQ4cufVVKSsrPP//817/+9fnnn3dzc1u8eLEW2QGJcA0M0EBERMTFixf/+c9/CiF8fHxmzJixZMkSIYTFYvnggw/efvvtzz//XAjRv3//9957b+DAgdZXbdiwYc6cOc3NzQUFBSNHjtQwPyADCgzQwHj2q2QAAAIRSURBVPr16+fOnfvzzz+XlpYOGjTou+++8/f3v3RC165dMzMz//znPx8+fLi0tNRoNAohLl682KNHD09Pz0OHDul0Oo2yA7LgFCKggUmTJlkslh07dmRmZg4ZMsTaXsePH9+2bZt1gp2d3dixYz/55JP6+vq9e/daN65evVqv1x85cmT9+vVaJQfkodc6ANARGQwGk8mUnZ1dWFg4d+5c68ZDhw5Nnjz57NmzTk5O1i2dOnWys7Nzc3MTQhw+fHjJkiX/+Mc/vv766+eeey4iIqJ79+6a/QEACXAEBmgjKirq448//v7776dNm2bdEhwc3KlTp2XLlrXMWbp0qaura3BwsMVimTNnzpgxY6ZMmbJ48eIuXbokJiZqFByQBdfAAG1UVVX16NFjzJgxl943v3nz5tjY2C5dulRWVt5xxx1VVVXbt28PCQl5880358+ff+jQob59+wohtm/fHh4eXlBQcO+992r2BwC0RoEBcqmvr9+3b9/kyZM//vjjkJAQ6/lDAFeiwAAZGQyGmpoarVMAUqPAABk1NDS03MoBoFUUGABASdyFCABQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUBIFBgBQEgUGAFASBQYAUNL/A28CRkTie8ZEAAAAAElFTkSuQmCC" /><!-- --></p>
+</div>
+<div id="related-work" class="section level2">
+<h2>Related Work</h2>
+<div id="core-topologyvertex-pool-hypertidy-ecosystem" class="section level3">
+<h3>Core topology/vertex-pool (hypertidy ecosystem)</h3>
+<table>
+<colgroup>
+<col width="22%" />
+<col width="17%" />
+<col width="60%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Package</th>
+<th>Where</th>
+<th>Relationship to wkpool</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="https://CRAN.R-project.org/package=silicate">silicate</a></td>
+<td>CRAN</td>
+<td>Mature predecessor — <code>SC</code> (edge-vertex), <code>ARC</code>
+(shared boundaries), <code>PATH</code> models. wkpool is the
+<code>wk</code>-native successor</td>
+</tr>
+<tr class="even">
+<td><a href="https://CRAN.R-project.org/package=unjoin">unjoin</a></td>
+<td>CRAN</td>
+<td>Vertex deduplication via data frame normalization — used internally
+by silicate</td>
+</tr>
+<tr class="odd">
+<td><a href="https://CRAN.R-project.org/package=wk">wk</a></td>
+<td>CRAN</td>
+<td>Path/geometry indexing via <code>wk_coords()</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="meshtriangulation" class="section level3">
+<h3>Mesh/triangulation</h3>
+<table>
+<colgroup>
+<col width="39%" />
+<col width="30%" />
+<col width="30%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Package</th>
+<th>Where</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="https://CRAN.R-project.org/package=RTriangle">RTriangle</a></td>
+<td>CRAN</td>
+<td>Shewchuk’s Triangle — constrained Delaunay, <code>as_pslg()</code>
+target</td>
+</tr>
+<tr class="even">
+<td><a href="https://CRAN.R-project.org/package=decido">decido</a></td>
+<td>CRAN</td>
+<td>Earcut — fast, returns vertex indices (implicit pool),
+<code>as_decido()</code> target</td>
+</tr>
+<tr class="odd">
+<td><a href="https://CRAN.R-project.org/package=sfdct">sfdct</a></td>
+<td>CRAN</td>
+<td>RTriangle wrapper for sf objects</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="adjacency-computed-not-stored" class="section level3">
+<h3>Adjacency (computed, not stored)</h3>
+<table>
+<colgroup>
+<col width="34%" />
+<col width="26%" />
+<col width="38%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Package</th>
+<th>Where</th>
+<th>Approach</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><a href="https://CRAN.R-project.org/package=sfdep">sfdep</a></td>
+<td>CRAN</td>
+<td><code>st_contiguity()</code> computes on-demand</td>
+</tr>
+<tr class="even">
+<td><a href="https://CRAN.R-project.org/package=sf">sf</a></td>
+<td>CRAN</td>
+<td><code>st_touches()</code>, <code>st_relate()</code> via GEOS —
+recomputes each time</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key distinction</strong>: wkpool differs from sf/spdep by
+<em>storing</em> topology (shared edges are explicit) rather than
+<em>computing</em> it on demand via GEOS. It’s a lightweight,
+<code>wk</code>-native evolution of silicate’s approach.</p>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
