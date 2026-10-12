@@ -5,14 +5,22 @@
 \alias{arcs_to_wkt}
 \title{Convert arcs to WKT linestrings}
 \usage{
-arcs_to_wkb(x, ...)
+arcs_to_wkb(x, quotient = FALSE, ...)
 
-arcs_to_wkt(x)
+arcs_to_wkt(x, quotient = FALSE)
 }
 \arguments{
 \item{x}{A wkpool (ideally after merge_coincident)}
 
-\item{...}{Passed to \code{\link[wk:wkb]{wk::as_wkb()}}}
+\item{quotient}{Walk the quotient graph: duplicated shared
+boundaries collapse to a single undirected edge (first occurrence
+keeps its direction), so a boundary shared by two features
+becomes ONE arc rather than one per feature, and its interior
+vertices are degree-2 pass-throughs. This is the TopoJSON-style
+arc decomposition of a polygon layer. Default FALSE walks every
+segment.}
+
+\item{...}{Passed to \code{\link[wk:as_wkb]{wk::as_wkb()}}}
 }
 \value{
 A wk_wkt vector of LINESTRING geometries
@@ -22,6 +30,11 @@ Convert arcs to WKT linestrings
 }
 \details{
 Each arc (maximal segment sequence between nodes) becomes a linestring.
+
+Geometry is assembled natively via \code{\link[wk:wk_linestring]{wk::wk_linestring()}} (WKB first,
+WKT derived from it): coordinates are emitted at full double
+precision, z is carried when the pool has it, and the pool's crs and
+geodesic flag are attached to the output.
 }
 \examples{
 x <- wk::as_wkb(c(

@@ -56,6 +56,10 @@ find_nodes(pool)
 find_arcs(pool)
 arc_node_summary(pool)
 
+## ----arc-node-quotient--------------------------------------------------------
+find_nodes(pool, quotient = TRUE)
+find_arcs(pool, quotient = TRUE)
+
 ## ----round-trip---------------------------------------------------------------
 # Arcs as linestrings
 arcs_to_wkt(pool)
@@ -66,28 +70,18 @@ cycles_to_wkt(pool)
 # Raw segments
 segments_to_wkt(pool, type = "linestring")[1:3]
 
-## ----pslg---------------------------------------------------------------------
-pslg <- as_pslg(pool)
-str(pslg)
+## ----period-x-----------------------------------------------------------------
+hemi <- wk::as_wkb(c(
+  "POLYGON ((-180 -60, 0 -60, 0 60, -180 60, -180 -60))",
+  "POLYGON ((0 -60, 180 -60, 180 60, 0 60, 0 -60))"
+))
+hp <- establish_topology(hemi)
+nrow(find_shared_edges(merge_coincident(hp)))
+nrow(find_shared_edges(merge_coincident(hp, period_x = 360)))
 
-## ----triangulate, eval = requireNamespace("RTriangle", quietly = TRUE)--------
-# A polygon with a hole
-holed <- wk::as_wkb(
-  "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 3 1, 3 3, 1 3, 1 1))"
-)
-hp <- establish_topology(holed)
-hp <- merge_coincident(hp)
-pslg_h <- as_pslg(hp)
-holes <- hole_points(hp)
-tri <- RTriangle::triangulate(
-  RTriangle::pslg(P = pslg_h$P, S = pslg_h$S, H = holes)
-)
-
-## ----decido, include = FALSE, eval = FALSE------------------------------------
-# ### decido (earcut)
-# 
-# dec <- as_decido(pool)
-# str(dec)
+## ----tri, eval = requireNamespace("decido", quietly = TRUE), fig.width = 6, fig.height = 4----
+tri <- pool_triangulate(pool)
+plot(tri, asp = 1)
 
 ## ----subset-------------------------------------------------------------------
 pool[1:4]
@@ -96,6 +90,11 @@ pool[1:4]
 pool_a <- establish_topology(wk::wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"))
 pool_b <- establish_topology(wk::wkt("POLYGON ((5 5, 6 5, 6 6, 5 6, 5 5))"))
 pool_combine(pool_a, pool_b)
+
+## ----from-tables--------------------------------------------------------------
+v <- data.frame(.vx = 1:4, x = c(0, 1, 1, 0), y = c(0, 0, 1, 1))
+s <- data.frame(.vx0 = 1:4, .vx1 = c(2:4, 1L), .feature = 1L)
+wkpool(v, s)
 
 ## ----plot, fig.width = 6, fig.height = 4--------------------------------------
 plot(pool)

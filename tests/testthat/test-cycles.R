@@ -98,7 +98,7 @@ test_that("classify_cycles assigns two different types for polygon with hole", {
   expect_equal(sort(unique(cl$type)), c("hole", "outer"))
 })
 
-test_that("classify_cycles OGC convention flips classification", {
+test_that("classify_cycles with provenance is structural: convention has no effect", {
   merged <- square_with_hole()
   cl_sf <- classify_cycles(merged, convention = "sf")
   cl_ogc <- classify_cycles(merged, convention = "ogc")
@@ -106,7 +106,26 @@ test_that("classify_cycles OGC convention flips classification", {
   # Same areas
   expect_equal(cl_sf$area, cl_ogc$area)
 
-  # Classifications are flipped
+  # Ring roles come from path provenance (first ring of a part is the
+  # exterior), so the winding convention is not consulted and both
+  # calls agree - and are correct
+  expect_identical(cl_sf$type, cl_ogc$type)
+  expect_identical(sum(cl_sf$type == "outer"), 1L)
+  expect_identical(sum(cl_sf$type == "hole"), 1L)
+  expect_true(all(c(".path", ".feature") %in% names(cl_sf)))
+})
+
+test_that("classify_cycles without provenance falls back to winding convention", {
+  merged <- square_with_hole()
+  # strip provenance: rebuild the pool without .path
+  s <- pool_segments(merged)
+  bare <- new_wkpool(pool_vertices(merged), s$.vx0, s$.vx1,
+                     feature = s$.feature)
+  cl_sf <- classify_cycles(bare, convention = "sf")
+  cl_ogc <- classify_cycles(bare, convention = "ogc")
+
+  expect_equal(cl_sf$area, cl_ogc$area)
+  # fallback classifies by winding, so the conventions flip
   expect_false(identical(cl_sf$type, cl_ogc$type))
 })
 
@@ -157,15 +176,65 @@ test_that("hole_points centroid is plausible", {
   expect_true(all(hp[, "y"] >= min(v$y) & hp[, "y"] <= max(v$y)))
 })
 
-test_that("hole_points on simple polygon reflects winding convention", {
-  # Known issue: with the current sign convention, a standard SF-wound
-  # outer ring (CCW, positive area) is treated as a hole. This test
-  # documents the current behaviour pending winding convention resolution.
+test_that("hole_points on simple polygon returns NULL (winding resolved)", {
+  # Resolved: ring roles come from path provenance, so a simple polygon
+  # has no holes regardless of its winding or the convention argument.
   merged <- single_square()
-  hp <- hole_points(merged)
+  expect_null(hole_points(merged))
+  expect_null(hole_points(merged, convention = "ogc"))
+})
 
-  # Currently returns a point (the centroid of the "hole") rather than NULL
-  # because the outer ring's positive area is classified as a hole.
-  # When winding convention is resolved, this should return NULL.
-  expect_true(is.matrix(hp) || !is.null(hp))
+test_that("pool_holes and hole_points agree", {
+  merged <- merge_coincident(establish_topology(wk::as_wkb(
+    "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))"
+  )))
+  expect_identical(pool_holes(merged), hole_points(merged))
+  expect_identical(pool_holes(merged, convention = "ogc"),
+                   hole_points(merged, convention = "ogc"))
+})
+
+test_that("pool_holes point is inside a non-convex hole", {
+  # a C-shaped hole whose vertex mean is outside the hole
+  merged <- merge_coincident(establish_topology(wk::as_wkb(paste0(
+    "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), ",
+    "(2 2, 8 2, 8 3, 3 3, 3 7, 8 7, 8 8, 2 8, 2 2))"
+  ))))
+  hp <- pool_holes(merged)
+  expect_equal(nrow(hp), 1L)
+  hole_x <- c(2, 8, 8, 3, 3, 8, 8, 2)
+  hole_y <- c(2, 2, 3, 3, 7, 7, 8, 8)
+  # mean of the ring is (5.25, 5): outside the C
+  inside <- function(px, py, x, y) {
+    j <- c(length(x), seq_len(length(x) - 1L))
+    sum(((y > py) != (y[j] > py)) &
+        (px < (x[j] - x) * (py - y) / (y[j] - y) + x)) %% 2 == 1
+  }
+  expect_false(inside(mean(hole_x), mean(hole_y), hole_x, hole_y))
+  expect_true(inside(hp[1, "x"], hp[1, "y"], hole_x, hole_y))
+})
+
+test_that("pool_holes point avoids an island in the hole", {
+  # the fattest ear of the square hole would contain the island
+  merged <- merge_coincident(establish_topology(wk::as_wkb(c(
+    "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 8 2, 8 8, 2 8, 2 2))",
+    "POLYGON ((4 4, 5 4, 5 5, 4 5, 4 4))"
+  ))))
+  hp <- pool_holes(merged)
+  expect_equal(nrow(hp), 1L)
+  expect_false(hp[1, "x"] >= 4 && hp[1, "x"] <= 5 &&
+               hp[1, "y"] >= 4 && hp[1, "y"] <= 5)
+  expect_true(hp[1, "x"] > 2 && hp[1, "x"] < 8 &&
+              hp[1, "y"] > 2 && hp[1, "y"] < 8)
+})
+
+test_that("pool_holes drops a hole filled by another polygon", {
+  enclave <- wk::as_wkb(c(
+    "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 8 2, 8 8, 2 8, 2 2))",
+    "POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))"
+  ))
+  expect_null(pool_holes(merge_coincident(establish_topology(enclave))))
+  # the hole alone is still a hole
+  expect_equal(
+    nrow(pool_holes(merge_coincident(establish_topology(enclave[1])))), 1L
+  )
 })

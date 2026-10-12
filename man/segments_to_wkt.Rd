@@ -15,13 +15,19 @@ segments_to_wkb(x, type = c("multilinestring", "linestring", "point"), ...)
 \item{type}{Output type: "linestring" (segments as paths), "multilinestring" (all segments),
 or "point" (vertices only)}
 
-\item{...}{Passed to \code{\link[wk:wkb]{wk::as_wkb()}}}
+\item{...}{Passed to \code{\link[wk:as_wkb]{wk::as_wkb()}}}
 }
 \value{
 A wk_wkt vector
 }
 \description{
 Convert wkpool segments to WKT
+}
+\details{
+Geometry is assembled natively via \code{\link[wk:wk_linestring]{wk::wk_linestring()}} and
+\code{\link[wk:wk_collection]{wk::wk_collection()}} (WKB first, WKT derived from it): coordinates
+are emitted at full double precision, z is carried when the pool has
+it, and the pool's crs and geodesic flag are attached to the output.
 }
 \examples{
 x <- wk::as_wkb(c(

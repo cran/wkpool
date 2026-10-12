@@ -21,10 +21,23 @@ Establish topology from any wk-handleable geometry
 Vertices are minted as-is from the input coordinates.
 No snapping or deduplication is performed - the pool represents
 the exact truth of the input geometry. Use merge_coincident()
-afterward to discover/establish shared topology.
+afterwards to discover/establish shared topology.
 
 Segments track their feature origin via \code{.feature} attribute,
 enabling discovery of shared boundaries and neighbour relations.
+
+Segments also carry a minted \code{.path} id - one id per input ring or
+linestring - with a sidecar table (see \code{\link[=pool_paths]{pool_paths()}}) recording each
+path's feature, part and ring identity as captured from
+\code{\link[wk:wk_coords]{wk::wk_coords()}}. This provenance makes cycles, ring roles and
+feature structure recoverable exactly, in input order and input
+winding: see \code{\link[=find_cycles]{find_cycles()}}, \code{\link[=classify_cycles]{classify_cycles()}} and
+\code{\link[=cycles_to_wkt]{cycles_to_wkt()}}.
+
+The coordinate reference system of the input (as reported by
+\code{\link[wk:wk_crs]{wk::wk_crs()}}) and its geodesic flag (\code{\link[wk:wk_is_geodesic]{wk::wk_is_geodesic()}}) are
+captured on the pool and travel with it through subsetting, merging
+and compaction, and back out through the round-trip functions.
 }
 \examples{
 x <- wk::as_wkb(c(

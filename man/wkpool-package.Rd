@@ -2,7 +2,6 @@
 % Please edit documentation in R/wkpool-package.R
 \docType{package}
 \name{wkpool-package}
-\alias{wkpool}
 \alias{wkpool-package}
 \title{wkpool: Vertex Pool Topology for Well-Known Geometry}
 \description{
@@ -17,7 +16,12 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Michael Sumner \email{mdsumner@gmail.com}
+\strong{Maintainer}: Michael Sumner \email{mdsumner@gmail.com} [copyright holder]
+
+Authors:
+\itemize{
+  \item Michael Sumner \email{mdsumner@gmail.com} [copyright holder]
+}
 
 }
 \keyword{internal}

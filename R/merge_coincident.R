@@ -4,17 +4,67 @@
 
 #' Merge coincident vertices in a pool
 #'
-#' @param x A wkpool
+#' @param x A wkpool, or a `wkpool_tri` (see [pool_triangulate()])
 #' @param tolerance Numeric tolerance for coordinate matching.
 #'   Default 0 means exact match only.
-#' @return A wkpool with shared vertices merged (fewer unique vertices)
+#' @param period_x `NULL` (default) for no wrapping, or a single positive
+#'   number: x is treated as periodic with this period when deciding which
+#'   vertices coincide (for example 360 for longitude in degrees). See
+#'   'Periodic x' below.
+#' @return A wkpool (or `wkpool_tri`) with shared vertices merged (fewer
+#'   unique vertices)
 #'
 #' @details
-#' With tolerance = 0, only exactly identical coordinates are merged.
-#' The first occurrence becomes the canonical vertex.
+#' With tolerance = 0, only exactly identical coordinates are merged -
+#' identity is the double-precision bit pattern (grouped at C level via
+#' vctrs), not a formatted representation, so values that differ only
+#' beyond printable precision remain distinct. The first occurrence
+#' becomes the canonical vertex; coordinates are never moved.
+#'
+#' With a nonzero tolerance, coordinates are snapped to a grid of cell
+#' size `tolerance` for matching (the canonical vertex keeps its
+#' original coordinates). Note this is a snap grid, not a distance
+#' guarantee: two vertices within `tolerance` of each other that
+#' straddle a grid-cell boundary do not merge.
+#'
+#' When the pool carries `z`, vertices are keyed on all coordinate
+#' columns: equal x/y with different z remain distinct vertices.
 #'
 #' This is where you discover shared boundaries between polygons,
 #' network connectivity, mesh topology, etc.
+#'
+#' @section Periodic x:
+#' With `period_x` set, vertices are keyed on `x %% period_x` (then on the
+#' tolerance snap grid, if any, wrapped again so that the grid cell at the
+#' period boundary is the same cell as the one at zero). This fuses the
+#' two copies of a seam, for example x = -180 and x = 180 for longitude,
+#' and with `period_x = 360` data in a 0 to 360 convention fuses at 0 and
+#' 360 in the same way. Once fused, a seam is an ordinary internal
+#' boundary: [find_shared_edges()], [find_internal_boundaries()] and the
+#' `quotient` argument of [find_arcs()] treat it like any other shared
+#' boundary.
+#'
+#' The period is never inferred: wkpool carries the crs without
+#' interpreting it, so it cannot know that x is longitude. The decision to
+#' fuse is made here, explicitly.
+#'
+#' Coordinates are still never moved: the canonical vertex keeps the x of
+#' its first occurrence (say -180), and segments from the other side of the
+#' seam now reference it. The topology is correct on the cylinder, but
+#' geometry emitted from the pool (for example by [cycles_to_wkb()]) has
+#' coordinate jumps of about one period across the seam. Consumers that
+#' understand wrapping (s2, great-circle densification) are fine; a planar
+#' consumer needs the seam split again downstream.
+#'
+#' Segments are identified by their two vertices, so on the cylinder a
+#' segment cannot say which way round it goes. Two segments whose ends
+#' fuse to the same pair but which run opposite ways around become the
+#' same edge, for example the edge from -180 to 0 in one feature and from
+#' 0 to 180 in another. This needs a segment that spans at least half the
+#' period, so densify long segments before merging with `period_x`.
+#'
+#' Only x is periodic. Poles (where all x coincide on the sphere),
+#' periodic y, and any detection from the crs are out of scope.
 #'
 #' Feature provenance (.feature) is preserved - segments keep their
 #' original feature assignment even after vertex merging.
@@ -29,60 +79,81 @@
 #' merged <- merge_coincident(pool)
 #' topology_report(merged)
 #'
+#' # two hemispheres, each with its own copy of the antimeridian
+#' g <- wk::as_wkb(c(
+#'   "POLYGON ((-180 -60, 0 -60, 0 60, -180 60, -180 -60))",
+#'   "POLYGON ((0 -60, 180 -60, 180 60, 0 60, 0 -60))"
+#' ))
+#' pool <- establish_topology(g)
+#' nrow(pool_vertices(merge_coincident(pool)))
+#' fused <- merge_coincident(pool, period_x = 360)
+#' nrow(pool_vertices(fused))
+#' find_shared_edges(fused)
+#'
 #' @export
-merge_coincident <- function(x, tolerance = 0) {
+merge_coincident <- function(x, tolerance = 0, period_x = NULL) {
+  check_period_x(period_x)
+  if (inherits(x, "wkpool_tri")) {
+    return(merge_coincident_tri(x, tolerance, period_x))
+  }
   check_wkpool(x)
   pool <- pool_vertices(x)
   vx0 <- vctrs::field(x, ".vx0")
   vx1 <- vctrs::field(x, ".vx1")
   feature <- pool_feature(x)
 
-  if (tolerance == 0) {
-    # Exact match: group by coordinate values
-    coord_key <- paste(pool$x, pool$y, sep = "_")
+  # Group vertices on coordinate identity (bit pattern, all coordinate
+  # columns, C level). Group ids are numbered by first appearance, so
+  # the first occurrence is the canonical vertex and the new contiguous
+  # .vx numbering follows pool order - same behaviour as before, minus
+  # the formatted-text keys (which silently collapsed doubles differing
+  # beyond ~15 significant digits).
+  g <- vertex_groups(pool, tolerance, period_x)
 
-    unique_keys <- unique(coord_key)
-    first_vx <- pool$.vx[match(unique_keys, coord_key)]
-    names(first_vx) <- unique_keys
-
-    canonical <- first_vx[coord_key]
-    names(canonical) <- pool$.vx
-
-    new_vx0 <- unname(canonical[as.character(vx0)])
-    new_vx1 <- unname(canonical[as.character(vx1)])
-
-    new_pool <- pool[pool$.vx %in% first_vx, , drop = FALSE]
-
-  } else {
-    # Tolerance-based: grid snap then exact match
-    grid_x <- round(pool$x / tolerance) * tolerance
-    grid_y <- round(pool$y / tolerance) * tolerance
-    coord_key <- paste(grid_x, grid_y, sep = "_")
-
-    unique_keys <- unique(coord_key)
-    first_vx <- pool$.vx[match(unique_keys, coord_key)]
-    names(first_vx) <- unique_keys
-
-    canonical <- first_vx[coord_key]
-    names(canonical) <- pool$.vx
-
-    new_vx0 <- unname(canonical[as.character(vx0)])
-    new_vx1 <- unname(canonical[as.character(vx1)])
-
-    new_pool <- pool[pool$.vx %in% first_vx, , drop = FALSE]
-  }
-
-  # Renumber .vx to be contiguous
-  old_vx <- new_pool$.vx
+  # group ids are numbered by first appearance, so a row is the first of
+  # its group exactly when its id exceeds every id before it
+  first <- g > c(0L, cummax(g)[-length(g)])
+  new_pool <- pool[first, , drop = FALSE]
   new_pool$.vx <- seq_len(nrow(new_pool))
 
-  final_remap <- new_pool$.vx
-  names(final_remap) <- old_vx
+  final_vx0 <- g[vx_match(vx0, pool$.vx)]
+  final_vx1 <- g[vx_match(vx1, pool$.vx)]
 
-  final_vx0 <- unname(final_remap[as.character(new_vx0)])
-  final_vx1 <- unname(final_remap[as.character(new_vx1)])
+  new_wkpool(new_pool, final_vx0, final_vx1, feature = feature,
+             path = pool_path(x),
+             paths = pool_paths(x),
+             crs = attr(x, "crs", exact = TRUE),
+             geodesic = attr(x, "geodesic", exact = TRUE))
+}
 
-  new_wkpool(new_pool, final_vx0, final_vx1, feature = feature)
+# Integer group id per pool row, keyed on the coordinate columns
+# (x, y, and z when present), exact on the double bit pattern.
+# tolerance > 0 keys on a snap grid of that cell size instead.
+# period_x keys x on x %% period_x (before the snap, and again after it
+# so the snapped value at the period boundary wraps to zero).
+# Group ids are numbered in order of first appearance.
+vertex_groups <- function(pool, tolerance = 0, period_x = NULL) {
+  cols <- intersect(c("x", "y", "z"), names(pool))
+  key <- pool[cols]
+  if (!is.null(period_x)) {
+    key$x <- key$x %% period_x
+  }
+  if (tolerance != 0) {
+    key <- as.data.frame(lapply(key, function(v) round(v / tolerance) * tolerance))
+    if (!is.null(period_x)) {
+      key$x <- key$x %% period_x
+    }
+  }
+  vctrs::vec_group_id(key)
+}
+
+check_period_x <- function(period_x) {
+  if (!is.null(period_x) &&
+      !(is.numeric(period_x) && length(period_x) == 1L &&
+        is.finite(period_x) && period_x > 0)) {
+    stop("`period_x` must be NULL or a single positive number", call. = FALSE)
+  }
+  invisible(period_x)
 }
 
 
@@ -109,39 +180,63 @@ merge_coincident <- function(x, tolerance = 0) {
 #' @export
 find_shared_edges <- function(x) {
   check_wkpool(x)
-  vx0 <- vctrs::field(x, ".vx0")
-  vx1 <- vctrs::field(x, ".vx1")
   feature <- pool_feature(x)
-
-  # Normalize edge direction for comparison (lower .vx first)
-  edge_lo <- pmin(vx0, vx1)
-  edge_hi <- pmax(vx0, vx1)
-  edge_key <- paste(edge_lo, edge_hi, sep = "-")
-
-  # Build edge-feature table
-  edge_df <- data.frame(
-    edge_key = edge_key,
-    .vx0 = edge_lo,
-    .vx1 = edge_hi,
-    .feature = if (!is.null(feature)) feature else NA_integer_,
-    segment_idx = seq_along(vx0)
-  )
+  e <- shared_edge_index(x)
 
   # Find edges that appear in multiple features
   if (!is.null(feature)) {
-    # Group by edge, count distinct features
-    edge_features <- tapply(edge_df$.feature, edge_df$edge_key,
-                            function(f) unique(f[!is.na(f)]))
-    shared_keys <- names(edge_features)[lengths(edge_features) > 1]
-
-    out <- edge_df[edge_df$edge_key %in% shared_keys, ]
-    out$features <- edge_features[out$edge_key]
+    out <- edge_frame(e$lo, e$hi, feature, e$keep)
+    # per shared edge, its distinct features in order of appearance,
+    # named by edge key
+    ef <- e$ef[e$n_feat[e$ef$gid] > 1, ]
+    features <- split(ef$f, ef$gid)
+    first <- match(as.integer(names(features)), e$gid)
+    names(features) <- paste(e$lo[first], e$hi[first], sep = "-")
+    out$features <- if (nrow(out)) features[out$edge_key] else integer()
     out
   } else {
     # No feature info - just find duplicate edges
-    dup_keys <- unique(edge_key[duplicated(edge_key)])
-    edge_df[edge_df$edge_key %in% dup_keys, ]
+    edge_frame(e$lo, e$hi, NULL, e$keep)
   }
+}
+
+# Undirected edge identity per segment (lower .vx first, integer group
+# id numbered by first appearance) and which segments lie on a shared
+# edge: one present in more than one feature (distinct non-NA
+# features), or without feature info simply duplicated
+shared_edge_index <- function(x) {
+  vx0 <- vctrs::field(x, ".vx0")
+  vx1 <- vctrs::field(x, ".vx1")
+  feature <- pool_feature(x)
+  lo <- pmin(vx0, vx1)
+  hi <- pmax(vx0, vx1)
+  gid <- vctrs::vec_group_id(data.frame(lo = lo, hi = hi))
+  n <- attr(gid, "n")
+  out <- list(lo = lo, hi = hi, gid = gid)
+  if (!is.null(feature)) {
+    # distinct (edge, feature) pairs in segment order, NA features dropped
+    out$ef <- vctrs::vec_unique(data.frame(gid = gid, f = feature)[!is.na(feature), ])
+    out$n_feat <- tabulate(out$ef$gid, nbins = n)
+    out$keep <- out$n_feat[gid] > 1
+  } else {
+    out$keep <- tabulate(gid, nbins = n)[gid] > 1
+  }
+  out
+}
+
+# Rows of the edge-feature table for the segments selected by `keep`,
+# with the same columns and row names as the full table subset
+edge_frame <- function(edge_lo, edge_hi, feature, keep) {
+  i <- which(keep)
+  out <- data.frame(
+    edge_key = paste(edge_lo[i], edge_hi[i], sep = "-"),
+    .vx0 = edge_lo[i],
+    .vx1 = edge_hi[i],
+    .feature = if (!is.null(feature)) feature[i] else rep(NA_integer_, length(i)),
+    segment_idx = i
+  )
+  row.names(out) <- i
+  out
 }
 
 
@@ -151,8 +246,8 @@ find_shared_edges <- function(x) {
 #' @return A wkpool containing only internal boundary segments
 #'
 #' @details
-#' Internal boundaries are edges where one feature has segment (v0→v1) and
-#' another feature has (v1→v0) — i.e., they share the edge but traverse it
+#' Internal boundaries are edges where one feature has segment (v0 -> v1) and
+#' another feature has (v1 -> v0), i.e. they share the edge but traverse it
 #' in opposite directions. This is the defining characteristic of a shared
 #' polygon boundary.
 #'
@@ -170,34 +265,36 @@ find_internal_boundaries <- function(x) {
   check_wkpool(x)
   s <- pool_segments(x)
 
-  # Create directed edge key
-  edge_directed <- paste(s$.vx0, s$.vx1, sep = "-")
-
-  # Create reversed key
-  edge_reversed <- paste(s$.vx1, s$.vx0, sep = "-")
-
-  # Internal = my edge exists as someone else's reverse
-  is_internal <- edge_directed %in% edge_reversed
+  # Internal = my directed edge exists as someone else's reverse
+  is_internal <- vctrs::vec_in(
+    data.frame(a = s$.vx0, b = s$.vx1),
+    data.frame(a = s$.vx1, b = s$.vx0)
+  )
 
   x[is_internal]
 }
 
 
-#' Convert wkpool to RTriangle pslg format
+#' Convert wkpool to a PSLG (planar straight line graph)
 #'
 #' @param x A wkpool (will be passed through merge_coincident if not already)
 #' @param ... passed to merge_coincident
-#' @return A list with P (vertex matrix) and S (segment matrix) for RTriangle::pslg()
+#' @return A list with P (vertex matrix) and S (segment matrix), the form
+#'   used by RTriangle::pslg()
 #'
 #' @details
-#' Produces a Planar Straight Line Graph suitable for constrained triangulation
-#' with RTriangle. The vertex pool maps directly to P, and segment indices
-#' map directly to S (both 1-indexed).
+#' Produces a planar straight line graph for constrained Delaunay
+#' triangulation. The vertex pool maps directly to P, and segment indices
+#' map directly to S (both 1-indexed). Shared boundaries appear once per
+#' feature.
 #'
-#' Note: Hole detection is not currently supported. The returned pslg
-#' does not include hole points (H). For polygons with holes, you may
-#' need to identify hole points manually using `find_cycles()` and
-#' `cycle_signed_area()`.
+#' A PSLG does not record which side of a segment is inside. For RTriangle,
+#' pass hole points from [pool_holes()] as `H`. The triangles come back as
+#' vertex and index matrices, and [new_wkpool_tri()] puts them on a vertex
+#' pool again; see `vignette("triangulation", package = "wkpool")`.
+#'
+#' For ear cutting that keeps the feature of each triangle, see
+#' [pool_triangulate()] (experimental).
 #'
 #' @examples
 #' x <- wk::as_wkb("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))")
@@ -250,8 +347,13 @@ as_decido <- function(x) {
 #' @return A list of integer vectors, each containing .vx IDs forming a closed cycle
 #'
 #' @details
-#' Walks the segment graph to discover closed loops. Relies on segments being
-#' in consecutive order within each ring (as produced by establish_topology).
+#' When the pool carries path provenance (minted by
+#' [establish_topology()]), a cycle is a path whose segment chain
+#' closes: rings are recovered exactly, in input order and input
+#' winding, robust to segment reordering, and the result carries a
+#' `path` attribute mapping each cycle to its path id. Pools without
+#' provenance fall back to walking the segment graph in storage order,
+#' which relies on segments being consecutive within each ring.
 #'
 #' Each cycle is a vector of vertex IDs in traversal order. The cycle is closed
 #' (first vertex connects back to last via a segment).
@@ -268,6 +370,72 @@ as_decido <- function(x) {
 #' @export
 find_cycles <- function(x) {
   check_wkpool(x)
+  path <- pool_path(x)
+  if (is.null(path)) {
+    return(find_cycles_walk(x))
+  }
+
+  # Provenance: a cycle is a path whose segment chain closes. Grouping
+  # by minted .path recovers rings exactly, in input order and input
+  # winding - no reliance on segment storage order across the pool.
+  segs <- pool_segments(x)
+  ids <- unique(path)
+  # segment indices per path, paths in order of first appearance
+  by_path <- split(seq_along(path), factor(path, levels = ids))
+  chains <- lapply(by_path, function(i) chain_path(segs$.vx0[i], segs$.vx1[i]))
+  ok <- vapply(chains, function(ch) {
+    !is.null(ch) && ch$closed && length(ch$vx) >= 3
+  }, logical(1))
+
+  cycles <- lapply(chains[ok], `[[`, "vx")
+  names(cycles) <- NULL
+  attr(cycles, "path") <- ids[ok]
+  cycles
+}
+
+# Order one path's segments into a chain. Returns list(vx, closed)
+# where vx is the vertex sequence in traversal order (closed chains
+# drop the repeated final vertex), or NULL if the segments do not form
+# a single simple chain (missing segments after subset, or branching).
+chain_path <- function(vx0, vx1) {
+  n <- length(vx0)
+  if (n == 0) return(NULL)
+
+  # fast path: already in chain order (establish_topology output)
+  if (n == 1 || all(vx1[-n] == vx0[-1])) {
+    closed <- vx1[n] == vx0[1]
+    return(list(vx = if (closed) vx0 else c(vx0, vx1[n]), closed = closed))
+  }
+
+  # reorder by connectivity: start at a vertex that ends no segment
+  start_candidates <- setdiff(vx0, vx1)
+  start <- if (length(start_candidates) > 0) start_candidates[1] else vx0[1]
+  ord <- integer(n)
+  used <- logical(n)
+  cur <- start
+  for (i in seq_len(n)) {
+    j <- which(!used & vx0 == cur)
+    if (length(j) != 1) return(NULL)
+    ord[i] <- j
+    used[j] <- TRUE
+    cur <- vx1[j]
+  }
+  chain_path(vx0[ord], vx1[ord])
+}
+
+# Structural ring roles for paths: within each (feature, part), the
+# first ring (lowest .ring id) is the exterior, later rings are holes.
+# wk emits the exterior ring first, so this is provenance, not guess.
+path_roles <- function(paths) {
+  key <- paste(paths$.feature, paths$.part, sep = "/")
+  mins <- tapply(paths$.ring, key, min)
+  ifelse(paths$.ring == unname(mins[key]), "outer", "hole")
+}
+
+# Legacy discovery: walk segments in storage order. Retained for pools
+# without path provenance (hand-built pools, as_arcs output). Relies on
+# segments being consecutive within each ring.
+find_cycles_walk <- function(x) {
   segs <- pool_segments(x)
   n <- nrow(segs)
 
@@ -311,7 +479,7 @@ find_cycles <- function(x) {
 #' - Negative area = outer ring
 #' - Positive area = hole
 #'
-#' This is intrinsic to the geometry — we observe winding, not declare it.
+#' This is intrinsic to the geometry: we observe winding, not declare it.
 #'
 #' @examples
 #' x <- wk::as_wkb("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))")
@@ -322,7 +490,7 @@ find_cycles <- function(x) {
 #'
 #' @export
 cycle_signed_area <- function(cycle, pool) {
-  idx <- match(cycle, pool$.vx)
+  idx <- vx_match(cycle, pool$.vx)
   x <- pool$x[idx]
   y <- pool$y[idx]
 
@@ -336,13 +504,44 @@ cycle_signed_area <- function(cycle, pool) {
 }
 
 
+# Signed areas of many cycles: one match() of all cycle vertices into
+# the pool, then the same shoelace arithmetic as cycle_signed_area()
+# on each cycle's slice (identical results, without a pool-wide match
+# per cycle)
+cycles_signed_area <- function(cycles, pool) {
+  if (length(cycles) == 0) return(numeric(0))
+  idx <- vx_match(unlist(cycles), pool$.vx)
+  x <- pool$x[idx]
+  y <- pool$y[idx]
+  end <- cumsum(lengths(cycles))
+  start <- end - lengths(cycles) + 1L
+  vapply(seq_along(cycles), function(k) {
+    i <- start[k]:end[k]
+    xk <- c(x[i], x[i[1]])
+    yk <- c(y[i], y[i[1]])
+    n <- length(i)
+    sum(xk[-(n+1)] * yk[-1] - xk[-1] * yk[-(n+1)]) / 2
+  }, numeric(1))
+}
+
+
 #' Classify cycles as outer rings or holes based on winding
 #'
 #' @param x A wkpool (ideally after merge_coincident)
-#' @param convention Which winding convention to use: "sf" (default) or "ogc"
+#' @param convention Which winding convention to use when the pool has
+#'   no path provenance: "sf" (default) or "ogc"
 #'   - sf: negative area = outer, positive = hole
 #'   - ogc: positive area = outer, negative = hole
-#' @return A data frame with cycle index, signed area, and type (outer/hole)
+#' @return A data frame with cycle index, signed area, and type
+#'   (outer/hole); when path provenance is present, also `.path` and
+#'   `.feature`
+#'
+#' @details
+#' When the pool carries path provenance, ring roles are structural:
+#' the first ring of each part is the exterior and later rings are its
+#' holes, regardless of winding, and `convention` is not consulted.
+#' The signed area still reports the observed winding. Pools without
+#' provenance are classified by winding under the requested convention.
 #'
 #' @examples
 #' x <- wk::as_wkb(c(
@@ -364,8 +563,26 @@ classify_cycles <- function(x, convention = c("sf", "ogc")) {
   cycles <- find_cycles(x)
   pool <- pool_vertices(x)
 
-  areas <- vapply(cycles, cycle_signed_area, numeric(1), pool = pool)
+  areas <- cycles_signed_area(cycles, pool)
 
+  cycle_paths <- attr(cycles, "path")
+  paths <- pool_paths(x)
+  if (!is.null(cycle_paths) && !is.null(paths) && length(cycle_paths) == length(cycles)) {
+    # Provenance: ring role is known structurally (first ring of its
+    # part is the exterior); winding is reported via area, not used to
+    # classify, and `convention` is not consulted
+    idx <- match(cycle_paths, paths$.path)
+    return(data.frame(
+      cycle = seq_along(cycles),
+      area = areas,
+      type = path_roles(paths)[idx],
+      .path = cycle_paths,
+      .feature = paths$.feature[idx]
+    ))
+  }
+
+  # Fallback for pools without provenance: classify by winding under
+  # the requested convention
   if (convention == "sf") {
     type <- ifelse(areas < 0, "outer", "hole")
   } else {
@@ -404,13 +621,34 @@ reverse_cycle <- function(cycle) {
 
 #' Get hole points for constrained triangulation
 #'
+#' `pool_holes()` and `hole_points()` are the same function: `pool_holes()`
+#' is the name that matches the other `pool_*()` accessors, and
+#' `hole_points()` is kept for existing code.
+#'
 #' @param x A wkpool (ideally after merge_coincident)
-#' @param convention Which winding convention to use: "sf" (default) or "ogc"
-#' @return A matrix of hole points (centroids of hole cycles), or NULL if no holes
+#' @param convention Which winding convention to use when the pool has
+#'   no path provenance: "sf" (default) or "ogc"
+#' @return A matrix of hole points, one point inside each hole cycle, or
+#'   NULL if no holes
 #'
 #' @details
-#' For use with RTriangle::triangulate(). Each row is the centroid of a hole,
+#' For use with RTriangle::triangulate(). Each row is a point inside a hole,
 #' which tells the triangulator to exclude that region.
+#'
+#' The point is found on a horizontal line across the hole: the middle of
+#' the widest stretch of that line that starts at the hole's boundary and
+#' crosses no segment of the pool. It is inside the hole even when the hole
+#' is not convex, where the centroid of the ring's vertices can fall
+#' outside it (and a triangulator would then erase the polygon around the
+#' hole instead), and it is clear of any island in the hole.
+#'
+#' A hole that is exactly filled by another polygon in the pool (an
+#' enclave in a coverage, such as a lake island that is its own feature)
+#' is not a hole of the pool and is not returned.
+#'
+#' When the pool carries path provenance, holes are identified
+#' structurally (non-first rings of their part) and `convention` is
+#' not consulted.
 #'
 #' @examples
 #' polygons_with_holes <- wk::as_wkb(c(
@@ -423,42 +661,125 @@ reverse_cycle <- function(cycle) {
 #'
 #' x <- establish_topology(polygons_with_holes)
 #' merged <- merge_coincident(x)
-#' hole_points(merged)
+#' pool_holes(merged)
 #' if (requireNamespace("RTriangle", quietly = TRUE)) {
 #'   pslg <- as_pslg(merged)
-#'   holes <- hole_points(merged)
+#'   holes <- pool_holes(merged)
 #'   tri <- RTriangle::triangulate(
 #'     RTriangle::pslg(P = pslg$P, S = pslg$S, H = holes)
 #'   )
 #' }
 #'
 #' @export
-hole_points <- function(x, convention = c("sf", "ogc")) {
+pool_holes <- function(x, convention = c("sf", "ogc")) {
   check_wkpool(x)
   convention <- match.arg(convention)
   cycles <- find_cycles(x)
   pool <- pool_vertices(x)
 
-  areas <- vapply(cycles, cycle_signed_area, numeric(1), pool = pool)
-
-  if (convention == "sf") {
-    hole_idx <- which(areas > 0)
+  cycle_paths <- attr(cycles, "path")
+  paths <- pool_paths(x)
+  if (!is.null(cycle_paths) && !is.null(paths) && length(cycle_paths) == length(cycles)) {
+    # Provenance: holes are the non-first rings of their part;
+    # `convention` is not consulted
+    role <- path_roles(paths)[match(cycle_paths, paths$.path)]
+    hole_idx <- which(role == "hole")
   } else {
-    hole_idx <- which(areas < 0)
+    areas <- cycles_signed_area(cycles, pool)
+
+    if (convention == "sf") {
+      hole_idx <- which(areas > 0)
+    } else {
+      hole_idx <- which(areas < 0)
+    }
+  }
+
+  # A hole that another polygon fills exactly (an enclave in a coverage)
+  # is not a hole of the pool: drop it, matching rings by their corner
+  # coordinates
+  if (length(hole_idx) > 0) {
+    ring_key <- function(cyc) {
+      i <- vx_match(cyc, pool$.vx)
+      paste(sort(unique(paste(pool$x[i], pool$y[i]))), collapse = ";")
+    }
+    keys <- vapply(cycles, ring_key, character(1))
+    filled <- keys[hole_idx] %in% keys[-hole_idx]
+    hole_idx <- hole_idx[!filled]
   }
 
   if (length(hole_idx) == 0) return(NULL)
 
   hole_cycles <- cycles[hole_idx]
 
-  # Centroid of each hole
-  pts <- t(vapply(hole_cycles, function(cyc) {
-    idx <- match(cyc, pool$.vx)
-    c(mean(pool$x[idx]), mean(pool$y[idx]))
+  # A point inside each hole: one match() for all holes, then per-hole slices
+  idx <- split(vx_match(unlist(hole_cycles), pool$.vx),
+               rep(seq_along(hole_cycles), lengths(hole_cycles)))
+  segs <- pool_segments(x)
+  i0 <- vx_match(segs$.vx0, pool$.vx)
+  i1 <- vx_match(segs$.vx1, pool$.vx)
+  pts <- t(vapply(idx, function(i) {
+    ring_interior_point(pool$x[i], pool$y[i],
+                        pool$x[i0], pool$y[i0], pool$x[i1], pool$y[i1])
   }, numeric(2)))
+  dimnames(pts) <- NULL
 
   colnames(pts) <- c("x", "y")
   pts
+}
+
+#' @rdname pool_holes
+#' @export
+hole_points <- function(x, convention = c("sf", "ogc")) {
+  pool_holes(x, convention = convention)
+}
+
+# A point inside the ring (x, y) and outside every other ring: cast a
+# horizontal line across the ring (through the widest gap between vertex
+# y values in the ring's y range, so no vertex is on it), cut it at every crossing
+# of the ring and of the other segments (sx0, sy0)-(sx1, sy1), and take
+# the middle of the widest piece that starts where the line enters the
+# ring. That piece touches the ring from the inside and crosses nothing,
+# so it is in the ring's own face, clear of islands. Falls back to the
+# vertex mean for a degenerate ring.
+ring_interior_point <- function(x, y, sx0 = NULL, sy0 = NULL,
+                                sx1 = NULL, sy1 = NULL) {
+  n <- length(x)
+  if (n > 1L && x[1L] == x[n] && y[1L] == y[n]) {
+    x <- x[-n]
+    y <- y[-n]
+    n <- n - 1L
+  }
+  fallback <- c(mean(x), mean(y))
+  uy <- sort(unique(c(y, sy0, sy1)))
+  uy <- uy[uy >= min(y) & uy <= max(y)]
+  if (n < 3L || length(uy) < 2L) return(fallback)
+  gap <- which.max(diff(uy))
+  y0 <- (uy[gap] + uy[gap + 1L]) / 2
+
+  # endpoints ordered by y, so a shared edge gives the same x whichever
+  # way each copy runs
+  cross_x <- function(ax, ay, bx, by) {
+    hit <- (ay > y0) != (by > y0)
+    ax <- ax[hit]; ay <- ay[hit]; bx <- bx[hit]; by <- by[hit]
+    up <- ay < by
+    lx <- ifelse(up, ax, bx); ly <- ifelse(up, ay, by)
+    hx <- ifelse(up, bx, ax); hy <- ifelse(up, by, ay)
+    lx + (y0 - ly) * (hx - lx) / (hy - ly)
+  }
+  j <- c(seq.int(2L, n), 1L)
+  ring <- sort(cross_x(x, y, x[j], y[j]))
+  other <- if (is.null(sx0)) numeric() else cross_x(sx0, sy0, sx1, sy1)
+  if (length(ring) < 2L) return(fallback)
+
+  # entering crossings are the odd ones along the line; each piece runs
+  # to the next crossing of anything strictly to its right
+  enter <- ring[seq.int(1L, length(ring), by = 2L)]
+  stops <- sort(unique(c(ring, other)))
+  right <- stops[findInterval(enter, stops) + 1L]
+  width <- right - enter
+  k <- which.max(width)
+  if (length(k) == 0L || is.na(width[k]) || width[k] <= 0) return(fallback)
+  c((enter[k] + right[k]) / 2, y0)
 }
 
 
@@ -490,24 +811,19 @@ find_neighbours <- function(x, type = c("edge", "vertex")) {
   }
 
   if (type == "edge") {
-    shared <- find_shared_edges(x)
+    e <- shared_edge_index(x)
 
-    if (nrow(shared) == 0) {
+    if (!any(e$keep)) {
       return(data.frame(feature_a = integer(), feature_b = integer()))
     }
 
-    # For each shared edge, create pairs of features
-    pairs <- lapply(unique(shared$edge_key), function(key) {
-      feats <- unique(shared$.feature[shared$edge_key == key])
-      if (length(feats) >= 2) {
-        expand.grid(feature_a = feats, feature_b = feats,
-                    stringsAsFactors = FALSE)
-      }
-    })
-
-    pairs <- do.call(rbind, pairs)
+    # For each shared edge (in order of appearance), all ordered pairs of
+    # its distinct features
+    d <- vctrs::vec_unique(data.frame(g = e$gid[e$keep], f = feature[e$keep]))
+    d <- d[order(d$g), ]
+    pairs <- group_pairs(d$g, d$f)
     pairs <- pairs[pairs$feature_a < pairs$feature_b, ]  # unique pairs
-    unique(pairs)
+    unique_rows(pairs)
 
   } else {
     # Vertex-based: features sharing any vertex
@@ -519,25 +835,50 @@ find_neighbours <- function(x, type = c("edge", "vertex")) {
       .vx = c(vx0, vx1),
       .feature = c(feature, feature)
     )
-    vf <- unique(vf)
+    vf <- vctrs::vec_unique(vf)
 
-    # For each vertex, find features
-    vertex_features <- split(vf$.feature, vf$.vx)
-    shared_vertices <- vertex_features[lengths(vertex_features) > 1]
-
-    pairs <- lapply(shared_vertices, function(feats) {
-      expand.grid(feature_a = feats, feature_b = feats,
-                  stringsAsFactors = FALSE)
-    })
-
-    pairs <- do.call(rbind, pairs)
-    if (is.null(pairs) || nrow(pairs) == 0) {
+    # Vertices shared by more than one feature, ascending .vx
+    vf <- vf[order(vf$.vx), ]
+    n <- tabulate(match(vf$.vx, unique(vf$.vx)))
+    vf <- vf[rep(n > 1, n), ]
+    if (nrow(vf) == 0) {
       return(data.frame(feature_a = integer(), feature_b = integer()))
     }
 
+    pairs <- group_pairs(vf$.vx, vf$.feature, label = TRUE)
     pairs <- pairs[pairs$feature_a < pairs$feature_b, ]
-    unique(pairs)
+    pairs <- unique_rows(pairs)
+    # row names as rbind() gives a named list: "<.vx>.<position>"
+    row.names(pairs) <- paste(pairs$.g, pairs$.p, sep = ".")
+    pairs[c("feature_a", "feature_b")]
   }
+}
+
+# All ordered pairs of values within each group, as expand.grid() would
+# give them per group and rbind() would stack them: groups must be
+# contiguous, and within a group feature_a varies fastest. Row names are
+# the stacked positions, or "<group>.<position>" when `label` is TRUE
+# (as rbind() names rows from a named list): with `label`, columns .g
+# and .p carry the group and position for the caller to build them on
+# the rows it keeps.
+group_pairs <- function(g, f, label = FALSE) {
+  k <- tabulate(match(g, unique(g)))
+  start <- cumsum(k) - k + 1L
+  # every row is feature_b once per member of its group
+  b <- rep(seq_along(f), rep(k, k))
+  a <- sequence(rep(k, k), from = rep(start, k))
+  out <- data.frame(feature_a = f[a], feature_b = f[b])
+  if (label) {
+    out$.g <- rep(unique(g), k^2)
+    out$.p <- sequence(k^2)
+  }
+  out
+}
+
+# unique() for the feature pair columns of a data frame, keeping the
+# first occurrence and its row name, keyed at C level
+unique_rows <- function(x) {
+  x[!duplicated(vctrs::vec_group_id(x[c("feature_a", "feature_b")])), , drop = FALSE]
 }
 
 
@@ -545,6 +886,8 @@ find_neighbours <- function(x, type = c("edge", "vertex")) {
 #'
 #' @param x A wkpool
 #' @param tolerance Tolerance for "near miss" detection
+#' @param period_x `NULL`, or the period of x, as in [merge_coincident()];
+#'   duplicates and near misses are then counted with x wrapped.
 #' @return List of diagnostic information
 #'
 #' @examples
@@ -556,29 +899,41 @@ find_neighbours <- function(x, type = c("edge", "vertex")) {
 #' topology_report(pool)
 #'
 #' @export
-topology_report <- function(x, tolerance = 1e-8) {
+topology_report <- function(x, tolerance = 1e-8, period_x = NULL) {
   check_wkpool(x)
+  check_period_x(period_x)
   pool <- pool_vertices(x)
   vx0 <- vctrs::field(x, ".vx0")
   vx1 <- vctrs::field(x, ".vx1")
   feature <- pool_feature(x)
 
-  # Exact duplicates
-  coord_key <- paste(pool$x, pool$y, sep = "_")
-  n_unique_exact <- length(unique(coord_key))
+  # Exact duplicates (bit-pattern identity, same key as merge_coincident)
+  g <- vertex_groups(pool, 0, period_x)
+  n_unique_exact <- if (length(g)) max(g) else 0L
   n_dup_exact <- nrow(pool) - n_unique_exact
 
   # Near misses (would merge with tolerance)
-  grid_x <- round(pool$x / tolerance) * tolerance
-  grid_y <- round(pool$y / tolerance) * tolerance
-  grid_key <- paste(grid_x, grid_y, sep = "_")
-  n_unique_tol <- length(unique(grid_key))
+  gt <- vertex_groups(pool, tolerance, period_x)
+  n_unique_tol <- if (length(gt)) max(gt) else 0L
   n_near_miss <- n_unique_exact - n_unique_tol
 
-  # Shared edges (after notional merge)
-  merged <- merge_coincident(x, tolerance = 0)
-  shared <- find_shared_edges(merged)
-  n_shared_edges <- length(unique(shared$edge_key))
+  # Shared edges after a notional exact merge, computed directly from
+  # the vertex groups (no materialized merge): undirected edges on
+  # canonical vertex ids; shared = present in more than one feature
+  # (or, without feature info, simply duplicated)
+  if (length(vx0) > 0) {
+    a0 <- g[vx_match(vx0, pool$.vx)]
+    a1 <- g[vx_match(vx1, pool$.vx)]
+    ekey <- vctrs::vec_group_id(data.frame(lo = pmin(a0, a1), hi = pmax(a0, a1)))
+    if (!is.null(feature)) {
+      ef <- vctrs::vec_unique(data.frame(e = ekey, f = feature))
+      n_shared_edges <- sum(tabulate(ef$e) > 1)
+    } else {
+      n_shared_edges <- sum(tabulate(ekey) > 1)
+    }
+  } else {
+    n_shared_edges <- 0L
+  }
 
   # Feature count
   n_features <- if (!is.null(feature)) length(unique(feature)) else NA

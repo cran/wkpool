@@ -1,23 +1,61 @@
+# Round-trip conversion: geometry out of the pool
+#
+# All emitters are built natively on wk: pool vertices are indexed into
+# a wk::xy()/wk::xyz() vector and assembled by wk's C-level linestring,
+# polygon and collection filters. WKB is the primary product and WKT is
+# derived from it. No coordinate text is assembled anywhere, so
+# coordinates emit at full double precision, z is carried when the pool
+# has it, and crs/geodesic ride along by construction.
+
+# indexed vertex vector for a sequence of pool row positions
+pool_coords <- function(x, idx) {
+  v <- pool_vertices(x)
+  crs <- wk::wk_crs(x)
+  if ("z" %in% names(v)) {
+    wk::xyz(v$x[idx], v$y[idx], v$z[idx], crs = crs)
+  } else {
+    wk::xy(v$x[idx], v$y[idx], crs = crs)
+  }
+}
+
+wkb_empty <- function(x) {
+  wk::wkb(list(), crs = wk::wk_crs(x), geodesic = wk::wk_is_geodesic(x))
+}
+
 #' @param ... Passed to [wk::as_wkb()]
 #' @rdname arcs_to_wkt
 #' @export
-arcs_to_wkb <- function(x, ...) {
+arcs_to_wkb <- function(x, quotient = FALSE, ...) {
   check_wkpool(x)
   if (length(x) < 1) {
-    return(wk::as_wkb(wk::wkt(character(0))))
+    return(wk::as_wkb(wkb_empty(x), ...))
   }
-  wk::as_wkb(arcs_to_wkt(x), ...)
-}
+  arcs <- find_arcs(x, quotient = quotient)
+  if (length(arcs) == 0) return(wk::as_wkb(wkb_empty(x), ...))
+  v <- pool_vertices(x)
 
-# Round-trip conversion: WKT/WKB from arcs, polygons from cycles
+  idx <- vx_match(unlist(arcs), v$.vx)
+  result <- wk::wk_linestring(
+    pool_coords(x, idx),
+    feature_id = rep(seq_along(arcs), lengths(arcs)),
+    geodesic = wk::wk_is_geodesic(x)
+  )
+  wk::as_wkb(result, ...)
+}
 
 #' Convert arcs to WKT linestrings
 #'
 #' @param x A wkpool (ideally after merge_coincident)
+#' @inheritParams find_arcs
 #' @return A wk_wkt vector of LINESTRING geometries
 #'
 #' @details
 #' Each arc (maximal segment sequence between nodes) becomes a linestring.
+#'
+#' Geometry is assembled natively via [wk::wk_linestring()] (WKB first,
+#' WKT derived from it): coordinates are emitted at full double
+#' precision, z is carried when the pool has it, and the pool's crs and
+#' geodesic flag are attached to the output.
 #'
 #' @examples
 #' x <- wk::as_wkb(c(
@@ -29,22 +67,9 @@ arcs_to_wkb <- function(x, ...) {
 #' arcs_to_wkt(merged)
 #'
 #' @export
-arcs_to_wkt <- function(x) {
+arcs_to_wkt <- function(x, quotient = FALSE) {
   check_wkpool(x)
-  if (length(x) < 1) {
-    return(wk::wkt(character(0)))
-  }
-  arcs <- find_arcs(x)
-  if (length(arcs) == 0) return(wk::wkt(character(0)))
-  pool <- pool_vertices(x)
-
-  wkts <- vapply(arcs, function(arc) {
-    idx <- match(arc, pool$.vx)
-    coords <- paste(pool$x[idx], pool$y[idx], sep = " ")
-    paste0("LINESTRING (", paste(coords, collapse = ", "), ")")
-  }, character(1))
-
-  wk::wkt(wkts)
+  wk::as_wkt(arcs_to_wkb(x, quotient = quotient))
 }
 
 
@@ -54,13 +79,25 @@ arcs_to_wkt <- function(x) {
 #' @param feature Logical: attempt to reconstruct original features?
 #'   If TRUE, groups cycles by .feature and nests holes in outers.
 #'   If FALSE, each cycle becomes a separate polygon.
-#' @param convention Winding convention: "sf" (default) or "ogc"
+#' @param convention Winding convention: "sf" (default) or "ogc"; only
+#'   consulted for pools without path provenance
 #' @return A wk_wkt vector of POLYGON geometries
 #'
 #' @details
-#' Converts cycles back to polygons. When feature = TRUE, attempts to
-#' reconstruct original polygon structure by grouping rings by feature
-#' and nesting holes within their containing outer ring.
+#' Converts cycles back to polygons. When feature = TRUE and the pool
+#' carries path provenance (minted by [establish_topology()]), the
+#' original feature structure is reconstructed exactly: rings are
+#' grouped into their original part (exterior first, then that part's
+#' holes) and parts into their original feature (POLYGON or
+#' MULTIPOLYGON), with winding emitted as stored and `convention` not
+#' consulted. Pools without provenance fall back to a heuristic that
+#' groups rings by feature and nests all holes with the first outer.
+#'
+#' Geometry is assembled natively via [wk::wk_polygon()] and
+#' [wk::wk_collection()] (WKB first, WKT derived from it): coordinates
+#' are emitted at full double precision, rings are closed by wk, z is
+#' carried when the pool has it, and the pool's crs and geodesic flag
+#' are attached to the output.
 #'
 #' @examples
 #' x <- wk::as_wkb(c(
@@ -74,14 +111,23 @@ arcs_to_wkt <- function(x) {
 #' @export
 cycles_to_wkt <- function(x, feature = TRUE, convention = c("sf", "ogc")) {
   check_wkpool(x)
+  wk::as_wkt(cycles_to_wkb(x, feature = feature, convention = convention))
+}
+
+
+#' @param ... Passed to [wk::as_wkb()]
+#' @rdname cycles_to_wkt
+#' @export
+cycles_to_wkb <- function(x, feature = TRUE, convention = c("sf", "ogc"), ...) {
+  check_wkpool(x)
   convention <- match.arg(convention)
   cycles <- find_cycles(x)
-  if (length(cycles) == 0) return(wk::wkt(character(0)))
-  pool <- pool_vertices(x)
-  segs <- pool_segments(x)
+  if (length(cycles) == 0) return(wk::as_wkb(wkb_empty(x), ...))
+  v <- pool_vertices(x)
+  geodesic <- wk::wk_is_geodesic(x)
 
   # Get signed areas
-  areas <- vapply(cycles, cycle_signed_area, numeric(1), pool = pool)
+  areas <- cycles_signed_area(cycles, v)
 
   if (convention == "sf") {
     is_outer <- areas < 0
@@ -89,79 +135,125 @@ cycles_to_wkt <- function(x, feature = TRUE, convention = c("sf", "ogc")) {
     is_outer <- areas > 0
   }
 
-  # Convert cycle to WKT ring string
-  cycle_to_ring <- function(cyc) {
-    idx <- match(cyc, pool$.vx)
-    # Close the ring
-    coords <- paste(pool$x[idx], pool$y[idx], sep = " ")
-    coords <- c(coords, coords[1])
-    paste0("(", paste(coords, collapse = ", "), ")")
+  # One POLYGON per block of rings: feature_id changes delimit polygons,
+  # ring_id changes delimit rings, wk closes each ring
+  build_polygons <- function(ring_list, poly_id) {
+    idx <- vx_match(unlist(ring_list), v$.vx)
+    n <- lengths(ring_list)
+    wk::wk_polygon(
+      pool_coords(x, idx),
+      feature_id = rep(poly_id, n),
+      ring_id = rep(seq_along(ring_list), n),
+      geodesic = geodesic
+    )
   }
 
   if (!feature || is.null(pool_feature(x))) {
-    # Simple: each outer cycle becomes a polygon (ignore holes for now)
-    # Or: each cycle becomes its own polygon
-    wkts <- vapply(seq_along(cycles), function(i) {
-      ring <- cycle_to_ring(cycles[[i]])
-      paste0("POLYGON (", ring, ")")
-    }, character(1))
-
-    return(wk::wkt(wkts))
+    # Simple: each cycle becomes its own polygon
+    return(wk::as_wkb(build_polygons(cycles, seq_along(cycles)), ...))
   }
 
-  # Try to reconstruct features with holes
-  # Associate each cycle with a feature based on segment membership
-  cycle_features <- vapply(seq_along(cycles), function(i) {
-    cyc <- cycles[[i]]
-    # Find segments that match this cycle's edges
-    for (j in seq_len(length(cyc))) {
-      v0 <- cyc[j]
-      v1 <- cyc[if (j == length(cyc)) 1 else j + 1]
+  # Provenance path: cycles carry their minted path ids, so feature and
+  # ring structure is reconstructed exactly - rings grouped into their
+  # original part (exterior first, then its own holes), parts grouped
+  # into their original feature (POLYGON or MULTIPOLYGON). `convention`
+  # is not consulted; winding is emitted as stored.
+  cycle_paths <- attr(cycles, "path")
+  paths_tab <- pool_paths(x)
+  if (!is.null(cycle_paths) && !is.null(paths_tab) &&
+      length(cycle_paths) == length(cycles)) {
+    idx <- match(cycle_paths, paths_tab$.path)
+    feat <- paths_tab$.feature[idx]
+    part <- paths_tab$.part[idx]
+    ring <- paths_tab$.ring[idx]
 
-      # Find matching segment
-      match_idx <- which(
-        (segs$.vx0 == v0 & segs$.vx1 == v1) |
-          (segs$.vx0 == v1 & segs$.vx1 == v0)
+    # Order rings: features in order of first appearance, parts in order
+    # of first appearance within their feature, rings ascending within
+    # their part (exterior ring first)
+    feat_rank <- match(feat, unique(feat))
+    fp <- vctrs::vec_group_id(data.frame(f = feat_rank, p = part))
+    ord <- order(feat_rank, fp, ring)
+
+    # One POLYGON per (feature, part), all built in a single call
+    poly_of_ring <- vctrs::vec_group_id(fp[ord])
+    polys <- build_polygons(cycles[ord], poly_of_ring)
+
+    # Features with one part are that POLYGON; features with several
+    # parts are one MULTIPOLYGON collecting them, also in one call
+    poly_feat <- feat_rank[ord][!duplicated(poly_of_ring)]
+    n_parts <- tabulate(poly_feat)
+    multi <- n_parts[poly_feat] > 1L
+    out_single <- polys[!multi]
+    out_multi <- if (any(multi)) {
+      wk::wk_collection(
+        polys[multi],
+        wk::wk_geometry_type("multipolygon"),
+        feature_id = poly_feat[multi]
       )
-      if (length(match_idx) > 0 && !is.null(segs$.feature)) {
-        return(segs$.feature[match_idx[1]])
-      }
     }
-    NA_integer_
-  }, integer(1))
+    is_multi_feat <- n_parts > 1L
+    pos <- integer(length(n_parts))
+    pos[!is_multi_feat] <- seq_len(sum(!is_multi_feat))
+    pos[is_multi_feat] <- sum(!is_multi_feat) + seq_len(sum(is_multi_feat))
+    combined <- if (is.null(out_multi)) out_single else c(out_single, out_multi)
+    return(wk::as_wkb(combined[pos], ...))
+  }
+
+  # Fallback for pools without provenance: associate each cycle with a
+  # feature based on segment membership
+  segs <- pool_segments(x)
+  cycle_features <- rep(NA_integer_, length(cycles))
+  if (!is.null(segs$.feature)) {
+    # Each cycle takes the feature of the first segment matching its
+    # first matchable edge (in traversal order, either direction)
+    n <- lengths(cycles)
+    v0 <- unlist(cycles)
+    nxt <- sequence(n) %% rep(n, n) + 1L
+    v1 <- v0[cumsum(c(0L, n[-length(n)]))[rep(seq_along(n), n)] + nxt]
+    seg_key <- data.frame(lo = pmin(segs$.vx0, segs$.vx1), hi = pmax(segs$.vx0, segs$.vx1))
+    m <- vctrs::vec_match(data.frame(lo = pmin(v0, v1), hi = pmax(v0, v1)), seg_key)
+    cyc <- rep(seq_along(n), n)
+    hit <- !is.na(m)
+    first <- which(hit)[!duplicated(cyc[hit])]
+    cycle_features[cyc[first]] <- segs$.feature[m[first]]
+  }
 
   # Group by feature
   unique_features <- unique(cycle_features[!is.na(cycle_features)])
+  by_feature <- split(seq_along(cycles),
+                      factor(cycle_features, levels = unique_features))
 
-  wkts <- vapply(unique_features, function(feat) {
-    feat_cycles <- which(cycle_features == feat)
+  out <- vector("list", length(unique_features))
+  keep <- logical(length(unique_features))
+
+  for (i in seq_along(unique_features)) {
+    feat_cycles <- by_feature[[i]]
     feat_outers <- feat_cycles[is_outer[feat_cycles]]
     feat_holes <- feat_cycles[!is_outer[feat_cycles]]
 
-    if (length(feat_outers) == 0) {
-      return(NA_character_)
-    }
-
-    # Simple case: one outer, associate all holes
-    # (Proper implementation would check containment)
-    rings <- c(
-      vapply(feat_outers, function(i) cycle_to_ring(cycles[[i]]), character(1)),
-      vapply(feat_holes, function(i) cycle_to_ring(cycles[[i]]), character(1))
-    )
+    if (length(feat_outers) == 0) next
+    keep[i] <- TRUE
 
     if (length(feat_outers) == 1) {
-      paste0("POLYGON (", paste(rings, collapse = ", "), ")")
+      # Simple case: one outer, associate all holes
+      # (Proper implementation would check containment)
+      out[[i]] <- build_polygons(cycles[c(feat_outers, feat_holes)], 1L)
     } else {
-      # Multiple outers = MULTIPOLYGON (simplified - all holes go with first outer)
+      # Multiple outers = MULTIPOLYGON (simplified - all holes dropped)
       # Proper implementation would match holes to containing outers
-      parts <- vapply(feat_outers, function(i) {
-        paste0("(", cycle_to_ring(cycles[[i]]), ")")
-      }, character(1))
-      paste0("MULTIPOLYGON (", paste(parts, collapse = ", "), ")")
+      polys <- build_polygons(cycles[feat_outers], seq_along(feat_outers))
+      out[[i]] <- wk::wk_collection(
+        polys,
+        wk::wk_geometry_type("multipolygon"),
+        feature_id = 1L
+      )
     }
-  }, character(1))
+  }
 
-  wk::wkt(wkts[!is.na(wkts)])
+  out <- out[keep]
+  if (length(out) == 0) return(wk::as_wkb(wkb_empty(x), ...))
+
+  wk::as_wkb(do.call(c, out), ...)
 }
 
 
@@ -171,6 +263,12 @@ cycles_to_wkt <- function(x, feature = TRUE, convention = c("sf", "ogc")) {
 #' @param type Output type: "linestring" (segments as paths), "multilinestring" (all segments),
 #'   or "point" (vertices only)
 #' @return A wk_wkt vector
+#'
+#' @details
+#' Geometry is assembled natively via [wk::wk_linestring()] and
+#' [wk::wk_collection()] (WKB first, WKT derived from it): coordinates
+#' are emitted at full double precision, z is carried when the pool has
+#' it, and the pool's crs and geodesic flag are attached to the output.
 #'
 #' @examples
 #' x <- wk::as_wkb(c(
@@ -184,53 +282,7 @@ cycles_to_wkt <- function(x, feature = TRUE, convention = c("sf", "ogc")) {
 #' @export
 segments_to_wkt <- function(x, type = c("multilinestring", "linestring", "point")) {
   check_wkpool(x)
-
-  if (length(x) < 1) {
-    return(wk::wkt(character(0)))
-  }
-  type <- match.arg(type)
-  pool <- pool_vertices(x)
-  segs <- pool_segments(x)
-  if (length(segs) == 0) return(wk::wkt(character(0)))
-  if (type == "point") {
-    wkts <- paste0("POINT (", pool$x, " ", pool$y, ")")
-    return(wk::wkt(wkts))
-  }
-
-  if (type == "linestring") {
-    # Each segment as separate linestring
-    idx0 <- match(segs$.vx0, pool$.vx)
-    idx1 <- match(segs$.vx1, pool$.vx)
-
-    wkts <- paste0(
-      "LINESTRING (",
-      pool$x[idx0], " ", pool$y[idx0], ", ",
-      pool$x[idx1], " ", pool$y[idx1], ")"
-    )
-    return(wk::wkt(wkts))
-  }
-
-  # multilinestring: all segments in one geometry
-  idx0 <- match(segs$.vx0, pool$.vx)
-  idx1 <- match(segs$.vx1, pool$.vx)
-
-  lines <- paste0(
-    "(", pool$x[idx0], " ", pool$y[idx0], ", ",
-    pool$x[idx1], " ", pool$y[idx1], ")"
-  )
-
-  wkt <- paste0("MULTILINESTRING (", paste(lines, collapse = ", "), ")")
-  wk::wkt(wkt)
-}
-
-
-
-#' @param ... Passed to [wk::as_wkb()]
-#' @rdname cycles_to_wkt
-#' @export
-cycles_to_wkb <- function(x, feature = TRUE, convention = c("sf", "ogc"), ...) {
-  check_wkpool(x)
-  wk::as_wkb(cycles_to_wkt(x, feature = feature, convention = convention), ...)
+  wk::as_wkt(segments_to_wkb(x, type = type))
 }
 
 
@@ -239,8 +291,30 @@ cycles_to_wkb <- function(x, feature = TRUE, convention = c("sf", "ogc"), ...) {
 #' @export
 segments_to_wkb <- function(x, type = c("multilinestring", "linestring", "point"), ...) {
   check_wkpool(x)
+  type <- match.arg(type)
+
   if (length(x) < 1) {
-    return(wk::as_wkb(wk::wkt(character(0))))
+    return(wk::as_wkb(wkb_empty(x), ...))
   }
-  wk::as_wkb(segments_to_wkt(x, type = type), ...)
+
+  if (type == "point") {
+    # vertices only: every pool vertex, referenced or not
+    v <- pool_vertices(x)
+    return(wk::as_wkb(pool_coords(x, seq_len(nrow(v))), ...))
+  }
+
+  # one LINESTRING per segment (the wk_handle presentation)
+  lines <- pool_segments_geometry(x)
+
+  if (type == "linestring") {
+    return(wk::as_wkb(lines, ...))
+  }
+
+  # multilinestring: all segments in one geometry
+  result <- wk::wk_collection(
+    lines,
+    wk::wk_geometry_type("multilinestring"),
+    feature_id = 1L
+  )
+  wk::as_wkb(result, ...)
 }

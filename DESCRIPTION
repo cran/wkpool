@@ -1,8 +1,8 @@
 Package: wkpool
 Title: Vertex Pool Topology for Well-Known Geometry
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: 
-    person("Michael", "Sumner", , "mdsumner@gmail.com", role = c("aut", "cre"))
+    person("Michael", "Sumner", , "mdsumner@gmail.com", role = c("aut", "cre", "cph"))
 Description: Establishes and maintains vertex pool topology for geometry 
     handled by 'wk'. Segments are the atomic unit, vertices are shared via
     integer references into a pool. Topology is made discoverable via coincident
@@ -15,16 +15,17 @@ License: MIT + file LICENSE
 URL: https://github.com/hypertidy/wkpool
 BugReports: https://github.com/hypertidy/wkpool/issues
 Encoding: UTF-8
-RoxygenNote: 7.3.3
 Imports: vctrs, wk (>= 0.9.4)
-Suggests: knitr, rmarkdown, RTriangle, spelling, testthat (>= 3.0.0),
-        traipse
+Suggests: decido, knitr, rmarkdown, RTriangle, silicate, spelling,
+        testthat (>= 3.0.0), traipse
 VignetteBuilder: knitr
+LinkingTo: cpp11
 Config/testthat/edition: 3
 Language: en-GB
-NeedsCompilation: no
-Packaged: 2026-02-28 23:10:02 UTC; mdsumner
-Author: Michael Sumner [aut, cre]
+Config/roxygen2/version: 8.1.0
+NeedsCompilation: yes
+Packaged: 2026-10-12 01:42:28 UTC; mdsumner
+Author: Michael Sumner [aut, cre, cph]
 Maintainer: Michael Sumner <mdsumner@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-03-05 19:10:02 UTC
+Date/Publication: 2026-10-12 11:00:02 UTC

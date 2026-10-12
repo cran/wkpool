@@ -122,24 +122,91 @@ pool_vertices(merged)  # data.frame: .vx, x, y
 #> 17  13 1.10 0.63
 #> 18  14 1.23 0.30
 pool_segments(merged)  # data.frame: .vx0, .vx1, .feature
-#>    .vx0 .vx1 .feature
-#> 1     1    2        1
-#> 2     2    3        1
-#> 3     3    4        1
-#> 4     4    5        1
-#> 5     5    6        1
-#> 6     6    7        1
-#> 7     7    1        1
-#> 8     8    9        1
-#> 9     9   10        1
-#> 10   10   11        1
-#> 11   11   12        1
-#> 12   12    8        1
-#> 13    7    6        2
-#> 14    6   13        2
-#> 15   13   14        2
-#> 16   14    7        2
+#>    .vx0 .vx1 .feature .path
+#> 1     1    2        1     1
+#> 2     2    3        1     1
+#> 3     3    4        1     1
+#> 4     4    5        1     1
+#> 5     5    6        1     1
+#> 6     6    7        1     1
+#> 7     7    1        1     1
+#> 8     8    9        1     2
+#> 9     9   10        1     2
+#> 10   10   11        1     2
+#> 11   11   12        1     2
+#> 12   12    8        1     2
+#> 13    7    6        2     3
+#> 14    6   13        2     3
+#> 15   13   14        2     3
+#> 16   14    7        2     3
 ```
+
+## Shared boundaries and holes
+
+`inlandwaters` (in silicate) has six features with 189 rings, 32 of them
+holes, and neighbouring states that share long boundaries vertex for
+vertex. After `merge_coincident()` those boundaries are the same vertex
+pairs, so the quotient graph walks each shared boundary once:
+
+``` r
+x <- wk::as_wkb(sf::st_geometry(silicate::inlandwaters))
+pool <- merge_coincident(establish_topology(x))
+find_arcs(pool, quotient = TRUE)    # 201 arcs
+find_nodes(pool, quotient = TRUE)   # 13 nodes where three or more edges meet
+classify_cycles(pool)               # 189 rings: 157 outer, 32 holes
+```
+
+<figure>
+<img src="man/figures/inlandwaters.png"
+alt="inlandwaters arcs, nodes and rings" />
+<figcaption aria-hidden="true">inlandwaters arcs, nodes and
+rings</figcaption>
+</figure>
+
+Without `quotient = TRUE` every vertex inside a shared boundary has
+degree 4 (each feature carries its own copy of the edge), so
+`find_nodes()` returns 2,619 nodes and `find_arcs()` 5,418 arcs. Use the
+quotient graph for coverages; the default counts every segment.
+
+## Vertex identity
+
+wkpool covers two rungs of a ladder of ways a vertex can be “the same”:
+exact float (`merge_coincident(tolerance = 0)`) and snapped
+(`tolerance > 0`). It does not node: a vertex lying on another feature’s
+edge stays a T-junction until something like GEOS inserts it. Above
+exact float, a lattice (a raster, a discrete global grid) can give
+identity by construction, with no comparison at all.
+
+<figure>
+<img src="man/figures/ladder.png" alt="the vertex identity ladder" />
+<figcaption aria-hidden="true">the vertex identity ladder</figcaption>
+</figure>
+
+## Performance
+
+All pipelines scale linearly. Against silicate on the same inputs
+(`bench/README.md` has the full tables), wkpool is 1.6 to 29 times
+faster than `PATH0()` for vertices and 12 to 1300 times faster than
+`SC()` and `ARC()` for edges and arcs.
+
+<figure>
+<img src="man/figures/scaling.png"
+alt="silicate vs wkpool scaling on hexagon coverages" />
+<figcaption aria-hidden="true">silicate vs wkpool scaling on hexagon
+coverages</figcaption>
+</figure>
+
+## Related
+
+wkpool is machinery: silicate’s models and `sc_*` verbs can sit on it,
+and so can other mesh models. Work in progress on top of it:
+
+- [silicate](https://github.com/hypertidy/silicate), branch `silicate2`:
+  the UGRID model and a model zoo, with polygons and lines routed into
+  UGRID through wkpool.
+- [meshcore](https://github.com/hypertidy/meshcore) (working name): one
+  verb set for rasters and discrete global grids, whose `as_wkpool()`
+  hands over an already-merged pool.
 
 ## Key decisions
 
@@ -154,13 +221,17 @@ pool_segments(merged)  # data.frame: .vx0, .vx1, .feature
 
 ## Next steps
 
-- [x] `wk_handle.wkpool()` — round-trip back to wk geometry
-- [x] Path reconstruction — derive linestrings/rings from segment
+- [x] `wk_handle.wkpool()`: round-trip back to wk geometry
+- [x] Path reconstruction: derive linestrings/rings from segment
   connectivity
+- [x] Arc-node topology and cycles, with quotient semantics for shared
+  boundaries
+- [x] PSLG for constrained triangulation (`as_pslg()`, for RTriangle;
+  see the triangulation vignette)
+- [x] Vectorised verbs with no quadratic scans; C++ (cpp11) for arcs
 - [ ] Apply to production package (trip)
-- [ ] Triangulation integration (decido) — indexed triangles from same
-  pool
-- [ ] Consider C++ once API is stable
+- [x] Triangulation integration (decido): indexed triangles from the
+  same pool (`pool_triangulate()`, experimental)
 
 ## Code of Conduct
 

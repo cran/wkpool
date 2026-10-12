@@ -48,8 +48,9 @@ overflow: visible;
 }
 </style>
 <style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -60,7 +61,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -348,11 +349,11 @@ segments. Every polygon boundary is a cycle of segments. Every track
 step between consecutive GPS fixes is a segment with a duration. It’s
 the simplest spatial primitive that encodes <em>connection</em> rather
 than just <em>position</em>.</p>
-<p>Simple Features — a dominant spatial data model — hides segments
-inside sealed coordinate sequences. A polygon is a ring of coordinates.
-A line is a list of coordinates. The connections between consecutive
-vertices are implicit. To discover them you extract coordinates, pair
-consecutive points, and rebuild the structure.</p>
+<p>Simple Features, a dominant spatial data model, hides segments inside
+sealed coordinate sequences. A polygon is a ring of coordinates. A line
+is a list of coordinates. The connections between consecutive vertices
+are implicit. To discover them you extract coordinates, pair consecutive
+points, and rebuild the structure.</p>
 <p>wkpool makes segments explicit.</p>
 </div>
 <div id="the-cost-of-sealed-geometry" class="section level2">
@@ -514,11 +515,13 @@ nodes:</p>
 <span id="cb10-34"><a href="#cb10-34" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span></code></pre></div>
 <p>This is the arc-node model from computational geometry (de Berg et
 al. 2008), expressed as data frames rather than linked-list pointer
-structures. The same decomposition that PostGIS topology provides, and
-Arc/INFO is probably the most famous implementation, remnants exist in
-.e00 format and some other softwares. This linear-only topology also
-highlights clearly how polygons are <em>just lines</em>, they aren’t
-composed of 2D topology (triangles) in many modern geo software.</p>
+structures. The same decomposition that PostGIS topology provides;
+Arc/INFO is probably the most famous implementation, and remnants
+survive in the .e00 format and elsewhere. This linear-only topology also
+shows clearly that polygons are <em>just lines</em>: in most geospatial
+software they are not composed of 2D topology (triangles). For triangles
+on the same vertex pool, see
+<code>vignette(&quot;triangulation&quot;, package = &quot;wkpool&quot;)</code>.</p>
 </div>
 <div id="cycles-and-winding" class="section level2">
 <h2>Cycles and winding</h2>
@@ -530,13 +533,16 @@ correspond to rings:</p>
 <span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="co">#&gt; [1] 1 2 3 4</span></span>
 <span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="co">#&gt; [[2]]</span></span>
-<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; [1] 2 5 6 3</span></span></code></pre></div>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; [1] 2 5 6 3</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;path&quot;)</span></span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt; [1] 1 2</span></span></code></pre></div>
 <p>Signed area from the shoelace formula distinguishes outer rings from
 holes — negative area is an outer ring in the SF convention:</p>
 <div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">classify_cycles</span>(pool)</span>
-<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="co">#&gt;   cycle area type</span></span>
-<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co">#&gt; 1     1    1 hole</span></span>
-<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="co">#&gt; 2     2    1 hole</span></span></code></pre></div>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="co">#&gt;   cycle area  type .path .feature</span></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co">#&gt; 1     1    1 outer     1        1</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="co">#&gt; 2     2    1 outer     2        2</span></span></code></pre></div>
 <p>This is <em>intrinsic</em> — we observe winding from the coordinate
 order, we don’t declare it via metadata. The geometry tells you what it
 is.</p>
@@ -553,7 +559,8 @@ back too:</p>
 <span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a></span>
 <span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co"># Cycles as polygons</span></span>
 <span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a><span class="fu">cycles_to_wkt</span>(pool)</span>
-<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt; &lt;wk_wkt[0] with CRS=NA&gt;</span></span></code></pre></div>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt; &lt;wk_wkt[2]&gt;</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; [1] POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0)) POLYGON ((1 0, 2 0, 2 1, 1 1, 1 0))</span></span></code></pre></div>
 <p>This is the “SF at the edges” principle. Read geometry in any format
 wk can handle (WKT, WKB, sf, geos, s2). Decompose to vertices and
 segments for analysis. Recompose to Simple Features when you need to
@@ -563,12 +570,19 @@ format.</p>
 </div>
 <div id="integration-triangulation" class="section level2">
 <h2>Integration: triangulation</h2>
-<p>The vertex pool and segment table map directly to constrained
-triangulation inputs — no coordinate extraction or reformatting
-needed:</p>
-<p>RTriangle PSLG format (without classing)</p>
+<p>The vertex pool and segment table are already the input a constrained
+triangulator wants, a planar straight line graph (PSLG).
+<code>as_pslg()</code> gives it as the <code>P</code> and <code>S</code>
+matrices RTriangle takes, with no coordinate extraction or
+reformatting:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">str</span>(<span class="fu">as_pslg</span>(pool))</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="co">#&gt; List of 2</span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co">#&gt;  $ P: num [1:6, 1:2] 0 1 1 0 2 2 0 0 1 1 ...</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co">#&gt;  $ S: int [1:8, 1:2] 1 2 3 4 2 5 6 3 2 3 ...</span></span></code></pre></div>
 <p>The pool <em>is</em> the PSLG. The mapping is structural, not a
-conversion.</p>
+conversion. Triangles can come back onto a vertex pool too, as a
+<code>wkpool_tri</code> (experimental): see
+<code>vignette(&quot;triangulation&quot;, package = &quot;wkpool&quot;)</code>.</p>
 </div>
 <div id="segments-in-movement-data" class="section level2">
 <h2>Segments in movement data</h2>
@@ -577,17 +591,17 @@ tracks, GPS logs — is inherently a sequence of segments. Each step
 between consecutive fixes carries a bearing, distance, speed, and
 duration.</p>
 <p>The traipse package works directly on this segment view:</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">library</span>(traipse)</span>
-<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a></span>
-<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co"># 5 GPS fixes from a Southern Ocean track</span></span>
-<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">147.0</span>, <span class="fl">147.5</span>, <span class="fl">148.1</span>, <span class="fl">148.3</span>, <span class="fl">148.0</span>)</span>
-<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">42.0</span>, <span class="sc">-</span><span class="fl">42.3</span>, <span class="sc">-</span><span class="fl">42.5</span>, <span class="sc">-</span><span class="fl">42.2</span>, <span class="sc">-</span><span class="fl">41.9</span>)</span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a></span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="co"># Each function operates on the implicit segment between consecutive points</span></span>
-<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="fu">track_bearing</span>(x, y)</span>
-<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="co">#&gt; [1] 129.04690 114.41743  26.38024 -36.79846        NA</span></span>
-<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="fu">track_distance</span>(x, y)</span>
-<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt; [1]       NA 53088.55 54163.60 37175.89 41559.40</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">library</span>(traipse)</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="co"># 5 GPS fixes from a Southern Ocean track</span></span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">147.0</span>, <span class="fl">147.5</span>, <span class="fl">148.1</span>, <span class="fl">148.3</span>, <span class="fl">148.0</span>)</span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">42.0</span>, <span class="sc">-</span><span class="fl">42.3</span>, <span class="sc">-</span><span class="fl">42.5</span>, <span class="sc">-</span><span class="fl">42.2</span>, <span class="sc">-</span><span class="fl">41.9</span>)</span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="co"># Each function operates on the implicit segment between consecutive points</span></span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a><span class="fu">track_bearing</span>(x, y)</span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a><span class="co">#&gt; [1] 129.04690 114.41743  26.38024 -36.79846        NA</span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a><span class="fu">track_distance</span>(x, y)</span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a><span class="co">#&gt; [1]       NA 53088.55 54163.60 37175.89 41559.40</span></span></code></pre></div>
 <p>traipse doesn’t construct a LINESTRING and decompose it. It works
 directly on the consecutive vertex pairs. The segments <em>are</em> the
 data. The trip package builds on this: a trip is a grouped tibble of

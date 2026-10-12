@@ -12,10 +12,23 @@
 #' Vertices are minted as-is from the input coordinates.
 #' No snapping or deduplication is performed - the pool represents
 #' the exact truth of the input geometry. Use merge_coincident()
-#' afterward to discover/establish shared topology.
+#' afterwards to discover/establish shared topology.
 #'
 #' Segments track their feature origin via `.feature` attribute,
 #' enabling discovery of shared boundaries and neighbour relations.
+#'
+#' Segments also carry a minted `.path` id - one id per input ring or
+#' linestring - with a sidecar table (see [pool_paths()]) recording each
+#' path's feature, part and ring identity as captured from
+#' [wk::wk_coords()]. This provenance makes cycles, ring roles and
+#' feature structure recoverable exactly, in input order and input
+#' winding: see [find_cycles()], [classify_cycles()] and
+#' [cycles_to_wkt()].
+#'
+#' The coordinate reference system of the input (as reported by
+#' [wk::wk_crs()]) and its geodesic flag ([wk::wk_is_geodesic()]) are
+#' captured on the pool and travel with it through subsetting, merging
+#' and compaction, and back out through the round-trip functions.
 #'
 #' @examples
 #' x <- wk::as_wkb(c(
@@ -30,6 +43,11 @@
 #'
 #' @export
 establish_topology <- function(x, ...) {
+
+  # Capture the wk contract before decomposition: crs is opaque and
+  # carried, never interpreted; geodesic records edge interpretation
+  crs <- tryCatch(wk::wk_crs(x), error = function(e) NULL)
+  geodesic <- tryCatch(wk::wk_is_geodesic(x), error = function(e) FALSE)
 
  # wk_coords works on anything handleable
   coords <- wk::wk_coords(x)
@@ -57,7 +75,7 @@ establish_topology <- function(x, ...) {
   # We need segment from row i to row i+1 ONLY if they're in the same path
 
   if (n < 2) {
-    return(wkpool_empty())
+    return(wkpool_empty(crs = crs, geodesic = geodesic))
   }
 
   # Check which consecutive rows share the same path
@@ -67,15 +85,36 @@ establish_topology <- function(x, ...) {
 
   same_path <- same_feature & same_part & same_ring
 
+  # Mint path identity: one id per maximal run of rows sharing
+  # (feature_id, part_id, ring_id) - i.e. one id per input ring or
+  # linestring. This is the provenance that makes cycles, ring roles
+  # and feature structure recoverable exactly, in input order and
+  # input winding.
+  path_of_row <- cumsum(c(TRUE, !same_path))
+  first_row <- which(!duplicated(path_of_row))
+  paths <- data.frame(
+    .path = path_of_row[first_row],
+    .feature = coords$feature_id[first_row],
+    .part = coords$part_id[first_row],
+    .ring = coords$ring_id[first_row]
+  )
+
   # Segment from row i to row i+1 where same_path[i] is TRUE
   seg_idx <- which(same_path)
   vx0 <- seg_idx
   vx1 <- seg_idx + 1L
 
-  # Track feature provenance
+  # Track feature and path provenance
   feature_id <- coords$feature_id[seg_idx]
+  path_id <- path_of_row[seg_idx]
 
-  new_wkpool(vertices, vx0, vx1, feature = feature_id)
+  # Drop paths that produced no segments (e.g. points)
+  has_seg <- tabulate(path_id, nbins = path_of_row[n]) > 0
+  paths <- paths[has_seg[paths$.path], , drop = FALSE]
+
+  new_wkpool(vertices, vx0, vx1, feature = feature_id,
+             path = path_id, paths = paths,
+             crs = crs, geodesic = geodesic)
 }
 
 
@@ -105,17 +144,18 @@ pool_compact <- function(x) {
   # Which vertices are actually used?
   active <- unique(c(vx0, vx1))
 
-  # Subset pool to active vertices
+  # Subset pool to active vertices (pool order)
   new_pool <- pool[pool$.vx %in% active, , drop = FALSE]
 
-  # Build remap: old .vx -> new .vx (1:n)
+  # Remap: old .vx -> new contiguous .vx by position in the kept pool
+  old_ids <- new_pool$.vx
   new_pool$.vx <- seq_len(nrow(new_pool))
-  remap <- match(active, pool$.vx)
-  names(remap) <- active
+  new_vx0 <- match(vx0, old_ids)
+  new_vx1 <- match(vx1, old_ids)
 
-  # Remap segment indices
-  new_vx0 <- new_pool$.vx[match(vx0, active)]
-  new_vx1 <- new_pool$.vx[match(vx1, active)]
-
-  new_wkpool(new_pool, new_vx0, new_vx1, feature = feature)
+  new_wkpool(new_pool, new_vx0, new_vx1, feature = feature,
+             path = pool_path(x),
+             paths = pool_paths(x),
+             crs = attr(x, "crs", exact = TRUE),
+             geodesic = attr(x, "geodesic", exact = TRUE))
 }

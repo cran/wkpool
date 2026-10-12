@@ -57,11 +57,8 @@ arcs_to_wkt(pool)
 # Cycles as polygons
 cycles_to_wkt(pool)
 
-## ----interch, include = FALSE-------------------------------------------------
-pslg <- as_pslg(pool)
-str(pslg)
-#RTriangle::pslg(P = pslg$P, S = pslg$S)
-
+## ----pslg---------------------------------------------------------------------
+str(as_pslg(pool))
 
 ## ----tracks, eval = requireNamespace("traipse", quietly = TRUE)---------------
 library(traipse)
