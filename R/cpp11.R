@@ -3,3 +3,59 @@
 find_arcs_cpp <- function(i0, i1, ids) {
   .Call(`_wkpool_find_arcs_cpp`, i0, i1, ids)
 }
+
+dissolve_rings_cpp <- function(t0, t1, t2, group, vx, vy) {
+  .Call(`_wkpool_dissolve_rings_cpp`, t0, t1, t2, group, vx, vy)
+}
+
+find_faces_cpp <- function(i0, i1, x, y) {
+  .Call(`_wkpool_find_faces_cpp`, i0, i1, x, y)
+}
+
+tri_locate_cpp <- function(x, y, t0, t1, t2, px, py) {
+  .Call(`_wkpool_tri_locate_cpp`, x, y, t0, t1, t2, px, py)
+}
+
+overlay_walk_cpp <- function(x, y, s0, s1, a, b) {
+  .Call(`_wkpool_overlay_walk_cpp`, x, y, s0, s1, a, b)
+}
+
+overlay_regions_cpp <- function(x, y, t0, t1, t2, nbr, s0, s1) {
+  .Call(`_wkpool_overlay_regions_cpp`, x, y, t0, t1, t2, nbr, s0, s1)
+}
+
+overlay_pairs_cpp <- function(vertex, group, n_vertex, is_a, is_b) {
+  .Call(`_wkpool_overlay_pairs_cpp`, vertex, group, n_vertex, is_a, is_b)
+}
+
+overlay_relate_cpp <- function(t0, t1, t2, n_vertex, nbr, g_dim, g_start, g_item, g_item2, a, b) {
+  .Call(`_wkpool_overlay_relate_cpp`, t0, t1, t2, n_vertex, nbr, g_dim, g_start, g_item, g_item2, a, b)
+}
+
+tri_neighbours_cpp <- function(t0, t1, t2) {
+  .Call(`_wkpool_tri_neighbours_cpp`, t0, t1, t2)
+}
+
+tri_measures_cpp <- function(x, y, t0, t1, t2, nbr, mem_start, mem, n_group) {
+  .Call(`_wkpool_tri_measures_cpp`, x, y, t0, t1, t2, nbr, mem_start, mem, n_group)
+}
+
+tri_vertex_pairs_cpp <- function(t0, t1, t2, mem_start, mem) {
+  .Call(`_wkpool_tri_vertex_pairs_cpp`, t0, t1, t2, mem_start, mem)
+}
+
+tri_relate_cpp <- function(t0, t1, t2, n_vertex, nbr, mem_start, mem, grp_start, grp_tri, a, b) {
+  .Call(`_wkpool_tri_relate_cpp`, t0, t1, t2, n_vertex, nbr, mem_start, mem, grp_start, grp_tri, a, b)
+}
+
+tri_boundary_cpp <- function(t0, t1, t2, nbr, mem_start, mem, once) {
+  .Call(`_wkpool_tri_boundary_cpp`, t0, t1, t2, nbr, mem_start, mem, once)
+}
+
+tri_clip_rect_cpp <- function(x, y, t0, t1, t2, xmin, ymin, xmax, ymax) {
+  .Call(`_wkpool_tri_clip_rect_cpp`, x, y, t0, t1, t2, xmin, ymin, xmax, ymax)
+}
+
+tri_convex_hull_cpp <- function(x, y, t0, t1, t2, grp_start, grp_tri, n_group) {
+  .Call(`_wkpool_tri_convex_hull_cpp`, x, y, t0, t1, t2, grp_start, grp_tri, n_group)
+}

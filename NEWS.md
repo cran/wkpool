@@ -1,3 +1,82 @@
+# wkpool 0.5.0
+
+* New `tri_as_arrow()` and `tri_from_arrow()`: a triangle pool as an Arrow
+  array (built with nanoarrow, now in Suggests) of triangles that index
+  one shared vertex dictionary, in the layout of the draft
+  `geoarrow.triangles` type. By default each row is a feature, the list of
+  its triangles (`List<FixedSizeList<Dictionary<int32, Coordinate>>[3]>`),
+  so the list offsets are the feature-to-triangle ranges; a triangle in
+  several features is written in each of their rows and read back as one
+  triangle in several groups. `layout = "triangle"` writes one row per
+  triangle.
+
+* New `tri_prepare()`: compute the triangle rows, the edge table, the group
+  membership and the boundary rings of a triangle pool once and keep them
+  with it, as a prepared geometry in GEOS. The `tri_*()` functions and
+  `tri_dissolve()` read the cache while the pool and `group` are
+  unchanged (checked on every use). `tri_is_prepared()` says whether a pool
+  has a valid cache. `tri_overlay()` returns a prepared mesh.
+
+* New `tri_structure()`: number of parts, holes and rings per group
+  (`ST_NumGeometries()`, `ST_NumInteriorRings()`), a read on a prepared
+  pool.
+
+* New `tri_overlay()` and `tri_overlay_relate()`: the full DE-9IM matrix
+  between features of two different layers, polygons (triangle meshes),
+  lines or points in any combination. The layers' boundaries and lines go
+  through one constrained triangulation (cdtr, now in Suggests) so that
+  every place they meet is a shared vertex or edge. The relation is then
+  read from the overlay's triangles, edges and vertices alone, with the
+  mod-2 boundary rule for lines. The tests check every combination of
+  types against geos, including shared and overlapping boundaries.
+
+* New vignette "Questions on a mesh": the `tri_*()` functions on a small
+  coverage, with overlapping groups, points, boundaries and clipping, and
+  a check against geos.
+
+* New `tri_locate()`: the triangle that holds each point (point in polygon,
+  `ST_Intersects()` of a point), by a grid of triangle buckets and exact
+  orientation tests, so a point on an edge or vertex goes to the same
+  triangle whatever the rounding (the lowest row that holds it). Points
+  can be any wk geometry, a two-column matrix, or `x` and `y`. No
+  dependency on a triangulation package.
+
+* `plot()` for `wkpool` gains `add`, to draw segments over an existing plot.
+
+* New `tri_*()` functions answer the usual `ST_*` questions about groups of
+  triangles (one group per triangle, or a table of triangle and group for
+  groups that overlap) without forming polygons, in compiled code:
+  `tri_neighbours()` (the edge table), `tri_measures()` (area, perimeter,
+  centroid, a point inside, extent), `tri_relate()` (the DE-9IM matrix
+  from shared triangles, edges and vertices alone), `tri_boundary()` (the
+  boundary as segments, optionally each shared edge once),
+  `tri_clip_rect()` (clip by a rectangle and stay a mesh) and
+  `tri_convex_hull()`. The tests check them against geos.
+
+* `tri_dissolve()` walks its rings in compiled code (`src/dissolve.cpp`),
+  about 10 times faster on a 33,000 triangle mesh. The kernel mirrors the R
+  reference step for step and the tests check that both give identical
+  rings.
+
+* New `find_faces()`: the faces of a segment graph, the regions it
+  encloses (street blocks between roads) plus one outer face per
+  connected component. Each edge is two half-edges; at every vertex the
+  outgoing half-edges are ordered by angle and the walk takes the next one
+  clockwise from its arrival, so every half-edge lies on exactly one face
+  and all faces come out in one pass. One row per half-edge with its
+  face, input segment, the face on the other side, the face's signed area
+  and whether the edge is a bridge or dead end. Compiled kernel with a
+  pure-R reference implementation, tested for identical output. On the
+  Greater Hobart road network (483,302 edges) it takes under a second.
+
+* New `tri_dissolve()`: dissolve the triangles of a `wkpool_tri` into one
+  MULTIPOLYGON per group, along shared triangle edges. `group` is one
+  1-based id per triangle (`NA` leaves a triangle out), the `set_id` of a
+  labelled mesh; the default dissolves each feature's triangles back into
+  its polygons. Moved here from polymer's `fuse()`, with the next boundary
+  edge at a vertex found by turning through the triangle fan instead of
+  comparing angles (the output is identical on polymer's test meshes).
+
 # wkpool 0.4.0
 
 * New vignette "Triangulation": ear cutting with `pool_triangulate()`,
